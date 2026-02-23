@@ -75,7 +75,7 @@ echo "SLURM Job ID:    $SLURM_JOB_ID"
 echo "SLURM Array Task ID: $SLURM_ARRAY_TASK_ID"
 
 # Set the necessary variables
-CODE_PATH="/lustre/fsw/portfolios/healthcareeng/users/lzbinden/git/cosmos-predict2.5-open-h"
+CODE_PATH="/lustre/fsw/portfolios/healthcareeng/users/lzbinden/git/cosmos-predict2.5-open-h-ORPHAN-I4H-v0.5"
 DATASET_PATH="/lustre/fsw/portfolios/healthcareeng/users/lzbinden/datasets/SutureBot_hybrid/suturebot_lerobot"
 
 # Run the training script inside the container

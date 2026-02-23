@@ -73,7 +73,7 @@ class ConcatTransform(InvertibleModalityTransform):
         grouped_keys = {}
         for key in data.keys():
             try:
-                modality, _ = key.split(".")
+                modality, _ = key.split(".", 1)
             except:  # noqa: E722
                 ### Handle language annotation special case
                 if "annotation" in key:
@@ -176,7 +176,7 @@ class ConcatTransform(InvertibleModalityTransform):
         return self.apply(data)
 
     def get_modality_metadata(self, key: str) -> StateActionMetadata:
-        modality, subkey = key.split(".")
+        modality, subkey = key.split(".", 1)
         assert self.dataset_metadata is not None, "Metadata not set"
         modality_config = getattr(self.dataset_metadata.modalities, modality)
         assert subkey in modality_config, f"{subkey=} not found in {modality_config=}"

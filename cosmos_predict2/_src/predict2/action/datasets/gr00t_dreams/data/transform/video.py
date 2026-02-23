@@ -127,8 +127,8 @@ class VideoTransform(ModalityTransform):
         super().set_metadata(dataset_metadata)
         self.original_resolutions = {}
         for key in self.apply_to:
-            split_keys = key.split(".")
-            assert len(split_keys) == 2, f"Invalid key: {key}. Expected format: modality.key"
+            split_keys = key.split(".", 1)
+            assert len(split_keys) == 2, f"Invalid key: {key}. Expected format: modality.subkey"
             sub_key = split_keys[1]
             if sub_key in dataset_metadata.modalities.video:
                 self.original_resolutions[key] = dataset_metadata.modalities.video[sub_key].resolution
