@@ -320,7 +320,7 @@ open_h_multi_val_dataloader = L(DataLoader)(
 from cosmos_predict2._src.predict2.action.datasets.gr00t_dreams.data.embodiment_tags import EmbodimentTag
 
 SUTUREBOT_DATASET_SPECS: list[dict] = [
-    {"path": "/SutureBot", "embodiment": EmbodimentTag.SUTUREBOT, "mix_ratio": 1.0},
+    {"path": os.environ.get("SUTUREBOT_DATASET_PATH", "/SutureBot"), "embodiment": EmbodimentTag.SUTUREBOT, "mix_ratio": 1.0},
 ]
 
 suturebot_train_dataset = L(MixedLeRobotDataset)(
