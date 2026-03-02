@@ -1,7 +1,7 @@
 # Quantitative Evaluation for Cosmos-H-Surgical-Simulator
 
 This document describes the quantitative evaluation pipeline implemented in
-[`scripts/cosmos_h_surgical_simulator_quant_eval.py`](scripts/cosmos_h_surgical_simulator_quant_eval.py).
+[`cosmos_h_surgical_simulator_quant_eval.py`](./cosmos_h_surgical_simulator_quant_eval.py).
 The script benchmarks action-conditioned video generation checkpoints of the
 Cosmos Predict-2.5 world model on CMR Surgical Versius robotic surgery data.
 
@@ -295,7 +295,7 @@ programmatic analysis.
 
 ### Plotting
 
-Use [`scripts/plot_quant_eval_results.py`](scripts/plot_quant_eval_results.py)
+Use [`plot_quant_eval_results.py`](./plot_quant_eval_results.py)
 to generate comparison plots from the JSON output or from hardcoded results:
 
 ```bash
