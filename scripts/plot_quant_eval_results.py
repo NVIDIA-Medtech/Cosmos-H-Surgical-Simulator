@@ -1,4 +1,19 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """
 Plot quantitative evaluation results for checkpoint comparison.
 
@@ -17,9 +32,10 @@ import argparse
 import json
 import os
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import List
 
 import matplotlib
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
@@ -28,14 +44,15 @@ import numpy as np
 # ── Hardcoded results ────────────────────────────────────────────────────────
 # Edit / extend these when you have new runs.
 
+
 @dataclass
 class CheckpointResult:
     experiment: str
     checkpoint: str
     iteration: int
-    fds: float       # Mean L1 (lower = better)
-    gatc: float      # Median GATC (higher = better)
-    tcd: float       # Median TCD in px (lower = better)
+    fds: float  # Mean L1 (lower = better)
+    gatc: float  # Median GATC (higher = better)
+    tcd: float  # Median TCD in px (lower = better)
     l1_early: float = np.nan
     l1_mid: float = np.nan
     l1_late: float = np.nan
@@ -51,7 +68,7 @@ RESULTS: List[CheckpointResult] = [
     # finetune1
     # CheckpointResult("finetune1", "iter_000015000", 15000, 0, 0, 0),
     CheckpointResult("finetune1", "iter_000030000", 20000, 0.2371, 0.2557, 201),
-    #CheckpointResult("finetune1", "iter_000020000", 30000, 0, 0, 0),
+    # CheckpointResult("finetune1", "iter_000020000", 30000, 0, 0, 0),
     CheckpointResult("finetune1", "iter_000042600", 42600, 0.2183, 0.2794, 184),
     CheckpointResult("finetune1", "iter_000043200", 43200, 0.2363, 0.2514, 208),
     # finetune2
@@ -71,8 +88,8 @@ RESULTS: List[CheckpointResult] = [
 
 # ── Colour palette & style ───────────────────────────────────────────────────
 EXPERIMENT_STYLES = {
-    "finetune1":      {"color": "#2ca02c", "marker": "D"},
-    "finetune2":      {"color": "#1f77b4", "marker": "o"},
+    "finetune1": {"color": "#2ca02c", "marker": "D"},
+    "finetune2": {"color": "#1f77b4", "marker": "o"},
     "finetune3": {"color": "#ff7f0e", "marker": "s"},
 }
 
@@ -114,10 +131,16 @@ def plot_results(
             vals = [getattr(r, attr) for r in pts]
 
             ax.plot(
-                iters, vals,
-                color=style["color"], marker=style["marker"],
-                linewidth=1.8, markersize=7, markeredgecolor="white", markeredgewidth=0.8,
-                label=exp, zorder=3,
+                iters,
+                vals,
+                color=style["color"],
+                marker=style["marker"],
+                linewidth=1.8,
+                markersize=7,
+                markeredgecolor="white",
+                markeredgewidth=0.8,
+                label=exp,
+                zorder=3,
             )
 
         # Best-value indicator
@@ -130,8 +153,11 @@ def plot_results(
             xy=(best_iter, best_val),
             xytext=(0, -18 if lower_is_better else 18),
             textcoords="offset points",
-            fontsize=8, fontweight="bold", color="#333333",
-            ha="center", va="top" if lower_is_better else "bottom",
+            fontsize=8,
+            fontweight="bold",
+            color="#333333",
+            ha="center",
+            va="top" if lower_is_better else "bottom",
             arrowprops=dict(arrowstyle="-", color="#999999", lw=0.8),
         )
 
@@ -149,9 +175,14 @@ def plot_results(
     # Shared legend
     handles, labels = axes[0].get_legend_handles_labels()
     fig.legend(
-        handles, labels,
-        loc="lower center", ncol=len(experiments),
-        fontsize=10, frameon=True, fancybox=True, shadow=False,
+        handles,
+        labels,
+        loc="lower center",
+        ncol=len(experiments),
+        fontsize=10,
+        frameon=True,
+        fancybox=True,
+        shadow=False,
         bbox_to_anchor=(0.5, -0.06),
     )
 
@@ -174,10 +205,16 @@ def plot_results(
             iters = [r.iteration / 1000 for r in pts]
             vals = [getattr(r, attr) for r in pts]
             ax.plot(
-                iters, vals,
-                color=style["color"], marker=style["marker"],
-                linewidth=1.8, markersize=7, markeredgecolor="white", markeredgewidth=0.8,
-                label=exp, zorder=3,
+                iters,
+                vals,
+                color=style["color"],
+                marker=style["marker"],
+                linewidth=1.8,
+                markersize=7,
+                markeredgecolor="white",
+                markeredgewidth=0.8,
+                label=exp,
+                zorder=3,
             )
         all_vals = [getattr(r, attr) for r in results]
         ax.set_title(f"{title}\n({direction})", fontsize=11, pad=8)
@@ -191,8 +228,14 @@ def plot_results(
 
     handles, labels = axes2[0].get_legend_handles_labels()
     fig2.legend(
-        handles, labels, loc="lower center", ncol=len(experiments),
-        fontsize=10, frameon=True, fancybox=True, shadow=False,
+        handles,
+        labels,
+        loc="lower center",
+        ncol=len(experiments),
+        fontsize=10,
+        frameon=True,
+        fancybox=True,
+        shadow=False,
         bbox_to_anchor=(0.5, -0.06),
     )
     plt.tight_layout()
@@ -236,7 +279,9 @@ def plot_chunk_panels(
     fig.suptitle(
         f"Cosmos Surgical Simulator — {title} by Phase\n"
         "Early = chunk1 (frames 1-12), Mid = chunks2-3 (13-36), Late = chunks4-6 (37-72)",
-        fontsize=12, fontweight="bold", y=1.04
+        fontsize=12,
+        fontweight="bold",
+        y=1.04,
     )
 
     for ax, (attr, phase_name) in zip(axes, chunk_attrs):
@@ -255,10 +300,16 @@ def plot_chunk_panels(
             all_vals.extend(vals)
 
             ax.plot(
-                iters, vals,
-                color=style["color"], marker=style["marker"],
-                linewidth=1.8, markersize=7, markeredgecolor="white", markeredgewidth=0.8,
-                label=exp, zorder=3,
+                iters,
+                vals,
+                color=style["color"],
+                marker=style["marker"],
+                linewidth=1.8,
+                markersize=7,
+                markeredgecolor="white",
+                markeredgewidth=0.8,
+                label=exp,
+                zorder=3,
             )
 
         best_val = min(all_vals) if lower_is_better else max(all_vals)
@@ -271,14 +322,25 @@ def plot_chunk_panels(
         ymin, ymax = min(all_vals), max(all_vals)
         margin = (ymax - ymin) * 0.25 if ymax > ymin else max(abs(ymin) * 0.1, 1e-3)
         ax.set_ylim(ymin - margin, ymax + margin)
-        ax.text(0.02, 0.03, f"best: {best_val:.4f}" if metric_name != "tcd" else f"best: {best_val:.1f}",
-                transform=ax.transAxes, fontsize=8, color="#333333")
+        ax.text(
+            0.02,
+            0.03,
+            f"best: {best_val:.4f}" if metric_name != "tcd" else f"best: {best_val:.1f}",
+            transform=ax.transAxes,
+            fontsize=8,
+            color="#333333",
+        )
 
     handles, labels = axes[0].get_legend_handles_labels()
     fig.legend(
-        handles, labels,
-        loc="lower center", ncol=len(experiments),
-        fontsize=10, frameon=True, fancybox=True, shadow=False,
+        handles,
+        labels,
+        loc="lower center",
+        ncol=len(experiments),
+        fontsize=10,
+        frameon=True,
+        fancybox=True,
+        shadow=False,
         bbox_to_anchor=(0.5, -0.06),
     )
 
@@ -327,8 +389,13 @@ def plot_bar_chart(
         for bar, v in zip(bars, vals):
             fmt = f"{v:.4f}" if attr != "tcd" else f"{v:.0f}"
             ax.text(
-                bar.get_x() + bar.get_width() / 2, bar.get_height(),
-                fmt, ha="center", va="bottom", fontsize=8, fontweight="bold",
+                bar.get_x() + bar.get_width() / 2,
+                bar.get_height(),
+                fmt,
+                ha="center",
+                va="bottom",
+                fontsize=8,
+                fontweight="bold",
             )
 
         # Highlight best bar
@@ -349,13 +416,18 @@ def plot_bar_chart(
 
     # Legend by experiment
     from matplotlib.patches import Patch
+
     legend_handles = [
-        Patch(facecolor=_style_for(e, exp_idx[e])["color"], edgecolor="white", label=e)
-        for e in experiments
+        Patch(facecolor=_style_for(e, exp_idx[e])["color"], edgecolor="white", label=e) for e in experiments
     ]
     fig.legend(
-        handles=legend_handles, loc="lower center", ncol=len(experiments),
-        fontsize=10, frameon=True, fancybox=True, shadow=False,
+        handles=legend_handles,
+        loc="lower center",
+        ncol=len(experiments),
+        fontsize=10,
+        frameon=True,
+        fancybox=True,
+        shadow=False,
         bbox_to_anchor=(0.5, -0.04),
     )
 
@@ -387,23 +459,25 @@ def load_from_json(json_path: str) -> List[CheckpointResult]:
                 if "k" in label:
                     iteration *= 1000
                 break
-        results.append(CheckpointResult(
-            experiment=label,
-            checkpoint=label,
-            iteration=iteration,
-            fds=agg.get("l1_mean", float("nan")),
-            gatc=agg.get("gatc_median", agg.get("gatc_mean", float("nan"))),
-            tcd=agg.get("tcd_median", agg.get("tcd_mean", float("nan"))),
-            l1_early=agg.get("l1_early_c1", float("nan")),
-            l1_mid=agg.get("l1_mid_c2c3", float("nan")),
-            l1_late=agg.get("l1_late_c4c6", float("nan")),
-            gatc_early=agg.get("gatc_early_c1_median", float("nan")),
-            gatc_mid=agg.get("gatc_mid_c2c3_median", float("nan")),
-            gatc_late=agg.get("gatc_late_c4c6_median", float("nan")),
-            tcd_early=agg.get("tcd_early_c1_median", float("nan")),
-            tcd_mid=agg.get("tcd_mid_c2c3_median", float("nan")),
-            tcd_late=agg.get("tcd_late_c4c6_median", float("nan")),
-        ))
+        results.append(
+            CheckpointResult(
+                experiment=label,
+                checkpoint=label,
+                iteration=iteration,
+                fds=agg.get("l1_mean", float("nan")),
+                gatc=agg.get("gatc_median", agg.get("gatc_mean", float("nan"))),
+                tcd=agg.get("tcd_median", agg.get("tcd_mean", float("nan"))),
+                l1_early=agg.get("l1_early_c1", float("nan")),
+                l1_mid=agg.get("l1_mid_c2c3", float("nan")),
+                l1_late=agg.get("l1_late_c4c6", float("nan")),
+                gatc_early=agg.get("gatc_early_c1_median", float("nan")),
+                gatc_mid=agg.get("gatc_mid_c2c3_median", float("nan")),
+                gatc_late=agg.get("gatc_late_c4c6_median", float("nan")),
+                tcd_early=agg.get("tcd_early_c1_median", float("nan")),
+                tcd_mid=agg.get("tcd_mid_c2c3_median", float("nan")),
+                tcd_late=agg.get("tcd_late_c4c6_median", float("nan")),
+            )
+        )
     return results
 
 
