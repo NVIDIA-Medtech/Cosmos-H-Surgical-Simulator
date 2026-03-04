@@ -1,4 +1,19 @@
 #!/usr/bin/env python
+# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """
 Intended Script Location: cosmos_predict2/_src/predict2/action/inference/inference_cmr.py
 
@@ -33,13 +48,12 @@ import numpy as np
 import torch
 from loguru import logger
 
-from cosmos_predict2._src.predict2.action.inference.inference_pipeline import (
-    ActionVideo2WorldInference,
-)
 from cosmos_predict2._src.predict2.action.datasets.gr00t_dreams.data.dataset import (
     LeRobotDataset,
 )
-
+from cosmos_predict2._src.predict2.action.inference.inference_pipeline import (
+    ActionVideo2WorldInference,
+)
 
 # Constants matching training config in groot_configs.py for cmr_versius
 # CMR Versius: 60Hz data → 10fps (TIMESTEP_INTERVAL=6), 13 video frames, 12 action frames
@@ -295,11 +309,12 @@ def main():
             # Limit number of chunks if specified
             total_chunks = len(chunk_indices)
             if args.max_chunks > 0 and total_chunks > args.max_chunks:
-                chunk_indices = chunk_indices[:args.max_chunks]
-                logger.info(f"Episode {episode_id}: processing {len(chunk_indices)}/{total_chunks} chunks (limited by --max_chunks)")
+                chunk_indices = chunk_indices[: args.max_chunks]
+                logger.info(
+                    f"Episode {episode_id}: processing {len(chunk_indices)}/{total_chunks} chunks (limited by --max_chunks)"
+                )
             else:
                 logger.info(f"Episode {episode_id}: {len(chunk_indices)} chunks")
-            
 
             predicted_chunks = []
             gt_chunks = []  # For comparison
@@ -317,9 +332,11 @@ def main():
 
                 if chunk_idx == 0:
                     # Log shapes on first chunk for verification
-                    logger.info(f"  Data shapes - video: {data['video'].shape} (C,T,H,W), "
-                                f"action: {actions.shape} (T,D), "
-                                f"expected: (3,{NUM_FRAMES},H,W), ({CHUNK_SIZE},44)")
+                    logger.info(
+                        f"  Data shapes - video: {data['video'].shape} (C,T,H,W), "
+                        f"action: {actions.shape} (T,D), "
+                        f"expected: (3,{NUM_FRAMES},H,W), ({CHUNK_SIZE},44)"
+                    )
 
                     # First chunk: use ground truth first frame as conditioning
                     current_frame = video[0]  # (H, W, C)
@@ -330,7 +347,7 @@ def main():
                 # Run inference with timing
                 torch.cuda.synchronize()  # Ensure GPU is ready
                 chunk_start_time = time.perf_counter()
-                
+
                 next_frame, video_chunk = video2world.step_inference(
                     img_array=current_frame,
                     action=actions.astype(np.float32),
@@ -338,12 +355,12 @@ def main():
                     seed=args.seed + chunk_idx,
                     num_latent_conditional_frames=1,
                 )
-                
+
                 torch.cuda.synchronize()  # Wait for GPU to finish
                 chunk_end_time = time.perf_counter()
                 chunk_inference_time = chunk_end_time - chunk_start_time
                 episode_chunk_times.append(chunk_inference_time)
-                
+
                 # Calculate chunk metrics (each chunk generates NUM_FRAMES-1=12 new frames)
                 frames_in_chunk = NUM_FRAMES - 1  # 12 frames generated per chunk
                 chunk_fps = frames_in_chunk / chunk_inference_time
@@ -353,10 +370,12 @@ def main():
                 # Use last predicted frame as next conditioning
                 current_frame = next_frame
 
-                logger.info(f"  Chunk {chunk_idx + 1}/{len(chunk_indices)} complete | "
-                           f"Time: {chunk_inference_time:.2f}s | "
-                           f"FPS: {chunk_fps:.2f} | "
-                           f"Frames: {frames_in_chunk}")
+                logger.info(
+                    f"  Chunk {chunk_idx + 1}/{len(chunk_indices)} complete | "
+                    f"Time: {chunk_inference_time:.2f}s | "
+                    f"FPS: {chunk_fps:.2f} | "
+                    f"Frames: {frames_in_chunk}"
+                )
 
             if not predicted_chunks:
                 logger.warning(f"No chunks generated for episode {episode_id}")
@@ -368,7 +387,7 @@ def main():
             episode_inference_time = sum(episode_chunk_times)
             episode_frames = len(chunk_indices) * (NUM_FRAMES - 1)  # Total frames generated
             episode_fps = episode_frames / episode_inference_time if episode_inference_time > 0 else 0
-            
+
             # Update global stats
             perf_stats["total_episodes"] += 1
             perf_stats["total_chunks"] += len(chunk_indices)
@@ -377,7 +396,7 @@ def main():
             perf_stats["chunk_times"].extend(episode_chunk_times)
             perf_stats["episode_times"].append(episode_inference_time)
             perf_stats["episode_fps"].append(episode_fps)
-            
+
             logger.info(f"Episode {episode_id} performance summary:")
             logger.info(f"  Total inference time: {episode_inference_time:.2f}s")
             logger.info(f"  Total wall time (incl. data loading): {episode_total_time:.2f}s")
@@ -422,6 +441,7 @@ def main():
         except Exception as e:
             logger.error(f"Error processing episode {episode_id}: {e}")
             import traceback
+
             traceback.print_exc()
             continue
 
@@ -429,14 +449,18 @@ def main():
     logger.info("=" * 60)
     logger.info("PERFORMANCE SUMMARY")
     logger.info("=" * 60)
-    
+
     if perf_stats["total_episodes"] > 0:
-        avg_fps = perf_stats["total_frames_generated"] / perf_stats["total_inference_time"] if perf_stats["total_inference_time"] > 0 else 0
+        avg_fps = (
+            perf_stats["total_frames_generated"] / perf_stats["total_inference_time"]
+            if perf_stats["total_inference_time"] > 0
+            else 0
+        )
         avg_chunk_time = np.mean(perf_stats["chunk_times"]) if perf_stats["chunk_times"] else 0
         std_chunk_time = np.std(perf_stats["chunk_times"]) if perf_stats["chunk_times"] else 0
         avg_episode_time = np.mean(perf_stats["episode_times"]) if perf_stats["episode_times"] else 0
         std_episode_time = np.std(perf_stats["episode_times"]) if perf_stats["episode_times"] else 0
-        
+
         logger.info(f"Total episodes processed: {perf_stats['total_episodes']}")
         logger.info(f"Total chunks processed: {perf_stats['total_chunks']}")
         logger.info(f"Total frames generated: {perf_stats['total_frames_generated']}")
@@ -447,12 +471,16 @@ def main():
         logger.info(f"Average inference time per video: {avg_episode_time:.2f}s (+/- {std_episode_time:.2f}s)")
         logger.info(f"Frames per chunk: {NUM_FRAMES - 1}")
         logger.info("-" * 60)
-        
+
         # Per-episode breakdown
         if len(perf_stats["episode_fps"]) > 1:
-            logger.info(f"FPS range across episodes: {min(perf_stats['episode_fps']):.2f} - {max(perf_stats['episode_fps']):.2f}")
-            logger.info(f"Episode time range: {min(perf_stats['episode_times']):.2f}s - {max(perf_stats['episode_times']):.2f}s")
-        
+            logger.info(
+                f"FPS range across episodes: {min(perf_stats['episode_fps']):.2f} - {max(perf_stats['episode_fps']):.2f}"
+            )
+            logger.info(
+                f"Episode time range: {min(perf_stats['episode_times']):.2f}s - {max(perf_stats['episode_times']):.2f}s"
+            )
+
         # Throughput metrics
         if perf_stats["total_inference_time"] > 0:
             videos_per_minute = 60.0 / avg_episode_time if avg_episode_time > 0 else 0
@@ -460,7 +488,7 @@ def main():
             logger.info(f"Throughput: {videos_per_minute:.2f} videos/min | {chunks_per_second:.2f} chunks/sec")
     else:
         logger.warning("No episodes were successfully processed.")
-    
+
     logger.info("=" * 60)
 
     # Cleanup

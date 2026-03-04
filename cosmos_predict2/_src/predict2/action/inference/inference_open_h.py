@@ -1,4 +1,19 @@
 #!/usr/bin/env python
+# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """
 Action conditioned inference script for Open-H multi-embodiment post-training.
 
@@ -52,11 +67,7 @@ import numpy as np
 import torch
 from loguru import logger
 
-from cosmos_predict2._src.predict2.action.inference.inference_pipeline import (
-    ActionVideo2WorldInference,
-)
 from cosmos_predict2._src.predict2.action.datasets.gr00t_dreams.data.dataset import (
-    LeRobotDataset,
     WrappedLeRobotSingleDataset,
 )
 from cosmos_predict2._src.predict2.action.datasets.gr00t_dreams.data.embodiment_tags import EmbodimentTag
@@ -65,7 +76,9 @@ from cosmos_predict2._src.predict2.action.datasets.gr00t_dreams.groot_configs im
     MAX_ACTION_DIM,
     construct_modality_config_and_transforms,
 )
-
+from cosmos_predict2._src.predict2.action.inference.inference_pipeline import (
+    ActionVideo2WorldInference,
+)
 
 # Video frames per inference window (1 context + 12 prediction)
 NUM_FRAMES = 13
@@ -87,21 +100,30 @@ def parse_arguments() -> argparse.Namespace:
     # --- Data arguments ---
     parser.add_argument("--dataset_path", type=str, required=True, help="Path to the LeRobot-format dataset")
     parser.add_argument(
-        "--embodiment", type=str, required=True,
+        "--embodiment",
+        type=str,
+        required=True,
         choices=list(EMBODIMENT_REGISTRY.keys()) + [EmbodimentTag.CMR_VERSIUS.value],
         help="Embodiment tag (e.g., jhu_dvrk_mono, dvrk_stanford_real, cmr_versius)",
     )
     parser.add_argument(
-        "--data_split", type=str, default="test",
+        "--data_split",
+        type=str,
+        default="test",
         choices=["train", "test", "full"],
         help="Data split to use for evaluation",
     )
     parser.add_argument(
-        "--episode_ids", type=str, required=True,
+        "--episode_ids",
+        type=str,
+        required=True,
         help="Comma-separated list of episode IDs to evaluate (e.g., '0,1,2')",
     )
     parser.add_argument(
-        "--exclude_splits", type=str, nargs="+", default=None,
+        "--exclude_splits",
+        type=str,
+        nargs="+",
+        default=None,
         help="Split names from info.json to exclude (e.g., --exclude_splits fail bad_frames)",
     )
 
@@ -203,7 +225,9 @@ def main():
 
     # Build modality config + transforms using the REAL pipeline
     config, train_transform, test_transform = construct_modality_config_and_transforms(
-        num_frames=NUM_FRAMES, embodiment=embodiment, downscaled_res=False,
+        num_frames=NUM_FRAMES,
+        embodiment=embodiment,
+        downscaled_res=False,
     )
 
     # Extract modality_filename from config if present
@@ -279,8 +303,10 @@ def main():
 
             total_chunks = len(chunk_indices)
             if args.max_chunks > 0 and total_chunks > args.max_chunks:
-                chunk_indices = chunk_indices[:args.max_chunks]
-                logger.info(f"Episode {episode_id}: processing {len(chunk_indices)}/{total_chunks} chunks (limited by --max_chunks)")
+                chunk_indices = chunk_indices[: args.max_chunks]
+                logger.info(
+                    f"Episode {episode_id}: processing {len(chunk_indices)}/{total_chunks} chunks (limited by --max_chunks)"
+                )
             else:
                 logger.info(f"Episode {episode_id}: {len(chunk_indices)} chunks")
 
@@ -308,9 +334,15 @@ def main():
                 actions = pad_action(actions, MAX_ACTION_DIM)
 
                 if chunk_idx == 0:
-                    action_dim_raw = data["action"].shape[-1] if isinstance(data["action"], torch.Tensor) else data["action"].shape[-1]
-                    logger.info(f"  Data shapes — video: {data['video'].shape}, "
-                                f"action: {action_dim_raw}D (raw) → {actions.shape[-1]}D (padded)")
+                    action_dim_raw = (
+                        data["action"].shape[-1]
+                        if isinstance(data["action"], torch.Tensor)
+                        else data["action"].shape[-1]
+                    )
+                    logger.info(
+                        f"  Data shapes — video: {data['video'].shape}, "
+                        f"action: {action_dim_raw}D (raw) → {actions.shape[-1]}D (padded)"
+                    )
                     current_frame = video[0]  # (H, W, C)
 
                 gt_chunks.append(video)
@@ -338,8 +370,10 @@ def main():
                 predicted_chunks.append(video_chunk)
                 current_frame = next_frame
 
-                logger.info(f"  Chunk {chunk_idx + 1}/{len(chunk_indices)} | "
-                           f"Time: {chunk_inference_time:.2f}s | FPS: {chunk_fps:.2f}")
+                logger.info(
+                    f"  Chunk {chunk_idx + 1}/{len(chunk_indices)} | "
+                    f"Time: {chunk_inference_time:.2f}s | FPS: {chunk_fps:.2f}"
+                )
 
             if not predicted_chunks:
                 logger.warning(f"No chunks generated for episode {episode_id}")
@@ -358,9 +392,11 @@ def main():
             perf_stats["episode_times"].append(episode_inference_time)
             perf_stats["episode_fps"].append(episode_fps)
 
-            logger.info(f"Episode {episode_id}: {len(chunk_indices)} chunks, "
-                       f"{episode_frames} frames, {episode_inference_time:.2f}s, "
-                       f"{episode_fps:.2f} FPS")
+            logger.info(
+                f"Episode {episode_id}: {len(chunk_indices)} chunks, "
+                f"{episode_frames} frames, {episode_inference_time:.2f}s, "
+                f"{episode_fps:.2f} FPS"
+            )
 
             # Stitch chunks
             stitched_predicted = [predicted_chunks[0]]
@@ -390,6 +426,7 @@ def main():
         except Exception as e:
             logger.error(f"Error processing episode {episode_id}: {e}")
             import traceback
+
             traceback.print_exc()
             continue
 
@@ -399,17 +436,21 @@ def main():
     logger.info("=" * 60)
 
     if perf_stats["total_episodes"] > 0:
-        avg_fps = perf_stats["total_frames_generated"] / perf_stats["total_inference_time"] if perf_stats["total_inference_time"] > 0 else 0
+        avg_fps = (
+            perf_stats["total_frames_generated"] / perf_stats["total_inference_time"]
+            if perf_stats["total_inference_time"] > 0
+            else 0
+        )
         avg_chunk_time = np.mean(perf_stats["chunk_times"])
         avg_episode_time = np.mean(perf_stats["episode_times"])
 
-        logger.info(f"Episodes: {perf_stats['total_episodes']} | "
-                    f"Chunks: {perf_stats['total_chunks']} | "
-                    f"Frames: {perf_stats['total_frames_generated']}")
-        logger.info(f"Total inference: {perf_stats['total_inference_time']:.2f}s | "
-                    f"Avg FPS: {avg_fps:.2f}")
-        logger.info(f"Avg chunk time: {avg_chunk_time:.2f}s | "
-                    f"Avg episode time: {avg_episode_time:.2f}s")
+        logger.info(
+            f"Episodes: {perf_stats['total_episodes']} | "
+            f"Chunks: {perf_stats['total_chunks']} | "
+            f"Frames: {perf_stats['total_frames_generated']}"
+        )
+        logger.info(f"Total inference: {perf_stats['total_inference_time']:.2f}s | Avg FPS: {avg_fps:.2f}")
+        logger.info(f"Avg chunk time: {avg_chunk_time:.2f}s | Avg episode time: {avg_episode_time:.2f}s")
     else:
         logger.warning("No episodes were successfully processed.")
 

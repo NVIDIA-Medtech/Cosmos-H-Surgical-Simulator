@@ -15,15 +15,12 @@
 
 import json
 from collections import defaultdict
-from concurrent.futures import ProcessPoolExecutor, as_completed
-from functools import partial
 from pathlib import Path
 from random import randint
 
 import imageio
 import numpy as np
 import pandas as pd
-import pyarrow.parquet as pq
 import torch
 from einops import rearrange
 from PIL import Image
@@ -57,6 +54,7 @@ LE_ROBOT_INFO_FILENAME = "meta/info.json"
 # =============================================================================
 # Split-based episode filtering (ported from gr00t-H/gr00t/data/split_utils.py)
 # =============================================================================
+
 
 def _parse_split_ranges(split_spec: str | list[str]) -> list[tuple[int, int]]:
     """Parse split range specs like "0:499", "42", "0:99, 200:299" into (start, end) tuples.
@@ -134,31 +132,32 @@ LE_ROBOT_DATA_FILENAME = "data/*/*.parquet"
 
 def _get_rank_prefix() -> str:
     """Get distributed rank prefix for logging.
-    
+
     Tries multiple methods to get the rank:
     1. torch.distributed.get_rank() if initialized
     2. Environment variables (RANK, LOCAL_RANK, SLURM_PROCID)
     3. Falls back to empty string if not in distributed mode
-    
+
     Returns:
         String like "[rank0] " or "" if rank unavailable
     """
     import os
-    
+
     # Try torch.distributed first
     try:
         import torch.distributed as dist
+
         if dist.is_initialized():
             return f"[rank{dist.get_rank()}] "
     except Exception:
         pass
-    
+
     # Try environment variables
     for env_var in ["RANK", "LOCAL_RANK", "SLURM_PROCID"]:
         rank = os.environ.get(env_var)
         if rank is not None:
             return f"[rank{rank}] "
-    
+
     return ""
 
 
@@ -317,9 +316,7 @@ class LeRobotSingleDataset(Dataset):
         # Resolve excluded episode indices from info.json splits
         self._exclude_splits = exclude_splits
         if exclude_splits:
-            self._excluded_episode_ids: set[int] = resolve_excluded_episode_indices(
-                self._dataset_path, exclude_splits
-            )
+            self._excluded_episode_ids: set[int] = resolve_excluded_episode_indices(self._dataset_path, exclude_splits)
         else:
             self._excluded_episode_ids = set()
 
@@ -498,8 +495,10 @@ class LeRobotSingleDataset(Dataset):
 
             if le_video_meta is None:
                 # Feature not in info.json — use sensible defaults
-                print(f"WARNING: Video feature '{original_key}' not found in info.json features, "
-                      f"using defaults (resolution will be determined at decode time)")
+                print(
+                    f"WARNING: Video feature '{original_key}' not found in info.json features, "
+                    f"using defaults (resolution will be determined at decode time)"
+                )
                 simplified_modality_meta["video"][new_key] = {
                     "resolution": [512, 288],  # default, overridden at decode time
                     "channels": 3,
@@ -600,9 +599,9 @@ class LeRobotSingleDataset(Dataset):
                 print(f"{_get_rank_prefix()}NOTE: Using post-transform stats: {stats_path}")
             else:
                 raise FileNotFoundError(
-                    f"\n{'='*80}\n"
+                    f"\n{'=' * 80}\n"
                     f"MISSING POST-TRANSFORM STATISTICS\n"
-                    f"{'='*80}\n"
+                    f"{'=' * 80}\n"
                     f"Dataset:    {self.dataset_path}\n"
                     f"Embodiment: {self.tag}\n\n"
                     f"Open-H embodiments require stats_cosmos.json with statistics\n"
@@ -613,7 +612,7 @@ class LeRobotSingleDataset(Dataset):
                     f"    python scripts/compute_openh_action_stats.py \\\n"
                     f"        --dataset-path {self.dataset_path} \\\n"
                     f"        --embodiment {self.tag}\n"
-                    f"{'='*80}\n"
+                    f"{'=' * 80}\n"
                 )
         try:
             with open(stats_path, "r") as f:
@@ -672,15 +671,21 @@ class LeRobotSingleDataset(Dataset):
                         stat = np.array(le_statistics[le_modality][stat_name])
                         dataset_statistics[our_modality][subkey][stat_name] = stat[indices].tolist()
                     dim = state_action_meta.end - state_action_meta.start
-                    stats_log["index_based"].append(f"{full_key} [{state_action_meta.start}:{state_action_meta.end}] from '{le_modality}' ({dim}D)")
+                    stats_log["index_based"].append(
+                        f"{full_key} [{state_action_meta.start}:{state_action_meta.end}] from '{le_modality}' ({dim}D)"
+                    )
 
         # Log statistics loading summary
         rank = _get_rank_prefix()
         print(f"{rank}[Stats Loading] Per-key stats ({len(stats_log['per_key'])}): {', '.join(stats_log['per_key'])}")
         if stats_log["index_based"]:
-            print(f"{rank}[Stats Loading] Index-based extraction ({len(stats_log['index_based'])}): {', '.join(stats_log['index_based'])}")
+            print(
+                f"{rank}[Stats Loading] Index-based extraction ({len(stats_log['index_based'])}): {', '.join(stats_log['index_based'])}"
+            )
         if stats_log["skipped"]:
-            print(f"{rank}[Stats Loading] Skipped passthrough keys ({len(stats_log['skipped'])}): {', '.join(stats_log['skipped'])}")
+            print(
+                f"{rank}[Stats Loading] Skipped passthrough keys ({len(stats_log['skipped'])}): {', '.join(stats_log['skipped'])}"
+            )
 
         # 3. Full dataset metadata
         metadata = DatasetMetadata(
@@ -754,8 +759,10 @@ class LeRobotSingleDataset(Dataset):
 
             excluded = self._excluded_episode_ids
             if excluded:
-                print(f"{rank}[exclude_splits] Excluding {len(excluded)} episode(s) "
-                      f"from splits {self._exclude_splits}: {sorted(excluded)[:20]}{'...' if len(excluded) > 20 else ''}")
+                print(
+                    f"{rank}[exclude_splits] Excluding {len(excluded)} episode(s) "
+                    f"from splits {self._exclude_splits}: {sorted(excluded)[:20]}{'...' if len(excluded) > 20 else ''}"
+                )
 
             all_steps: list[tuple[int, int]] = []
             skipped_episodes = 0
@@ -771,8 +778,10 @@ class LeRobotSingleDataset(Dataset):
 
             total_eps = len(self.trajectory_ids)
             used_eps = total_eps - skipped_episodes
-            print(f"{rank}[Step Enumeration] {len(all_steps):,} steps from {used_eps}/{total_eps} episodes"
-                  f"{f' ({skipped_episodes} excluded by split filter)' if skipped_episodes else ''}")
+            print(
+                f"{rank}[Step Enumeration] {len(all_steps):,} steps from {used_eps}/{total_eps} episodes"
+                f"{f' ({skipped_episodes} excluded by split filter)' if skipped_episodes else ''}"
+            )
             return all_steps
 
     def _get_all_steps_cmr_filtered(self) -> list[tuple[int, int]]:
@@ -813,7 +822,9 @@ class LeRobotSingleDataset(Dataset):
             return all_steps
 
         action_delta_indices = action_config.delta_indices
-        print(f"{rank}[CMR Filter] Using action delta indices: {action_delta_indices[:5]}{'...' if len(action_delta_indices) > 5 else ''} (len={len(action_delta_indices)})")
+        print(
+            f"{rank}[CMR Filter] Using action delta indices: {action_delta_indices[:5]}{'...' if len(action_delta_indices) > 5 else ''} (len={len(action_delta_indices)})"
+        )
 
         # Generate cache key based on action_delta_indices (primary factor affecting filtering)
         # Include dataset name and split for uniqueness across different dataset configurations
@@ -825,9 +836,9 @@ class LeRobotSingleDataset(Dataset):
         # Load pre-computed cache (MUST exist - no fallback computation)
         if not cache_path.exists():
             raise FileNotFoundError(
-                f"\n{'='*80}\n"
+                f"\n{'=' * 80}\n"
                 f"CMR VERSIUS FILTER CACHE NOT FOUND\n"
-                f"{'='*80}\n"
+                f"{'=' * 80}\n"
                 f"Expected cache file: {cache_path}\n\n"
                 f"The CMR clutch-aware filter cache must be pre-computed BEFORE training.\n"
                 f"This is required to avoid expensive computation during distributed training startup.\n\n"
@@ -838,7 +849,7 @@ class LeRobotSingleDataset(Dataset):
                 f"        --num-frames {len(action_delta_indices)}\n\n"
                 f"Or to generate caches for all default CMR datasets:\n"
                 f"    python scripts/compute_cmr_filtered_episodes_cache.py\n"
-                f"{'='*80}\n"
+                f"{'=' * 80}\n"
             )
 
         print(f"{rank}[CMR Filter] Loading pre-computed cache from: {cache_path}")
@@ -849,9 +860,9 @@ class LeRobotSingleDataset(Dataset):
         cached_indices = cache_data.get("action_delta_indices", [])
         if cached_indices != action_delta_indices:
             raise ValueError(
-                f"\n{'='*80}\n"
+                f"\n{'=' * 80}\n"
                 f"CMR VERSIUS FILTER CACHE INVALID\n"
-                f"{'='*80}\n"
+                f"{'=' * 80}\n"
                 f"Cache file: {cache_path}\n\n"
                 f"The cached action_delta_indices don't match the current configuration:\n"
                 f"  Cached:  {cached_indices[:5]}{'...' if len(cached_indices) > 5 else ''} (len={len(cached_indices)})\n"
@@ -863,7 +874,7 @@ class LeRobotSingleDataset(Dataset):
                 f"        --split {self.data_split} \\\n"
                 f"        --num-frames {len(action_delta_indices)} \\\n"
                 f"        --force\n"
-                f"{'='*80}\n"
+                f"{'=' * 80}\n"
             )
 
         # Extract all_steps from cache
@@ -961,6 +972,7 @@ class LeRobotSingleDataset(Dataset):
         from cosmos_predict2._src.predict2.action.datasets.gr00t_dreams.groot_configs import (
             OPEN_H_EMBODIMENT_TAGS,
         )
+
         return OPEN_H_EMBODIMENT_TAGS
 
     def set_transforms_metadata(self, metadata: DatasetMetadata):
@@ -1505,8 +1517,10 @@ class WrappedLeRobotSingleDataset(LeRobotSingleDataset):
             return data
         except Exception as e:
             trajectory_id, base_index = self.all_steps[index]
-            print(f"[{self.tag}/{self.dataset_name}] Error at item {index} "
-                  f"(episode={trajectory_id}, base_idx={base_index}): {e}")
+            print(
+                f"[{self.tag}/{self.dataset_name}] Error at item {index} "
+                f"(episode={trajectory_id}, base_idx={base_index}): {e}"
+            )
             print("Retrying with a random index...")
             return self.__getitem__(randint(0, len(self) - 1))
 
@@ -1726,7 +1740,9 @@ class MixedLeRobotDataset(torch.utils.data.Dataset):
             print(f"    path={path}")
 
             config, train_transform, test_transform = construct_modality_config_and_transforms(
-                num_frames=num_frames, embodiment=embodiment, downscaled_res=downscaled_res,
+                num_frames=num_frames,
+                embodiment=embodiment,
+                downscaled_res=downscaled_res,
             )
 
             # Extract modality_filename from config if present (set by registry)
@@ -1811,10 +1827,15 @@ class MixedLeRobotDataset(torch.utils.data.Dataset):
         header = f"{'Embodiment':<22} {'Path':<40} {'Real Len':>10} {'Mix Ratio':>10} {'Repeat':>7} {'Virtual':>10} {'% Total':>8}"
         print(header)
         print("-" * 80)
-        for i, (ds, tag, ratio, rf, vs) in enumerate(zip(
-            self.sub_datasets, self.embodiment_tags, self.mix_ratios,
-            self.repeat_factors, self.virtual_sizes,
-        )):
+        for i, (ds, tag, ratio, rf, vs) in enumerate(
+            zip(
+                self.sub_datasets,
+                self.embodiment_tags,
+                self.mix_ratios,
+                self.repeat_factors,
+                self.virtual_sizes,
+            )
+        ):
             path_short = Path(ds.dataset_path).name
             if len(path_short) > 38:
                 path_short = "..." + path_short[-35:]
@@ -1856,8 +1877,10 @@ class MixedLeRobotDataset(torch.utils.data.Dataset):
         try:
             lerobot_data = self.sub_datasets[dataset_idx][real_idx]
         except Exception as e:
-            print(f"[MixedLeRobotDataset] Error in sub-dataset {dataset_idx} "
-                  f"({self.embodiment_tags[dataset_idx]}), idx={real_idx}: {e}")
+            print(
+                f"[MixedLeRobotDataset] Error in sub-dataset {dataset_idx} "
+                f"({self.embodiment_tags[dataset_idx]}), idx={real_idx}: {e}"
+            )
             print("Retrying with a random index...")
             return self.__getitem__(randint(0, len(self) - 1))
 
@@ -1867,8 +1890,10 @@ class MixedLeRobotDataset(torch.utils.data.Dataset):
             current_dim = action.shape[-1]
             if current_dim < self.max_action_dim:
                 padding = torch.zeros(
-                    *action.shape[:-1], self.max_action_dim - current_dim,
-                    dtype=action.dtype, device=action.device,
+                    *action.shape[:-1],
+                    self.max_action_dim - current_dim,
+                    dtype=action.dtype,
+                    device=action.device,
                 )
                 action = torch.cat([action, padding], dim=-1)
         lerobot_data["action"] = action
@@ -1881,8 +1906,10 @@ class MixedLeRobotDataset(torch.utils.data.Dataset):
             current_dim = state.shape[-1]
             if current_dim < self._max_state_dim:
                 padding = torch.zeros(
-                    *state.shape[:-1], self._max_state_dim - current_dim,
-                    dtype=state.dtype, device=state.device,
+                    *state.shape[:-1],
+                    self._max_state_dim - current_dim,
+                    dtype=state.dtype,
+                    device=state.device,
                 )
                 state = torch.cat([state, padding], dim=-1)
             lerobot_data["__key__"] = state
@@ -1891,4 +1918,3 @@ class MixedLeRobotDataset(torch.utils.data.Dataset):
         lerobot_data["embodiment_tag"] = self.embodiment_tags[dataset_idx]
 
         return lerobot_data
-

@@ -15,7 +15,6 @@
 
 from cosmos_predict2._src.predict2.action.datasets.gr00t_dreams.data.dataset import ModalityConfig
 from cosmos_predict2._src.predict2.action.datasets.gr00t_dreams.data.embodiment_tags import EmbodimentTag
-
 from cosmos_predict2._src.predict2.action.datasets.gr00t_dreams.data.transform.base import ComposedModalityTransform
 from cosmos_predict2._src.predict2.action.datasets.gr00t_dreams.data.transform.concat import ConcatTransform
 from cosmos_predict2._src.predict2.action.datasets.gr00t_dreams.data.transform.state_action import (
@@ -31,7 +30,6 @@ from cosmos_predict2._src.predict2.action.datasets.gr00t_dreams.data.transform.v
     VideoResize,
     VideoToTensor,
 )
-
 
 # =============================================================================
 # Open-H Multi-Embodiment Registry
@@ -49,21 +47,38 @@ from cosmos_predict2._src.predict2.action.datasets.gr00t_dreams.data.transform.v
 # All other datasets are zero-padded to 44D by MixedLeRobotDataset.
 # =============================================================================
 
+
 # Helper: create a standard dual-arm EEF + gripper action config (most common pattern)
 def _dual_arm_eef_configs(
-    pose1_key: str, grip1_key: str, pose2_key: str, grip2_key: str,
-    state_pose1: str, state_pose2: str,
-    input_rot: str = "quat", ref_rot: str = "quat",
-    input_quat: str = "xyzw", ref_quat: str = "xyzw",
+    pose1_key: str,
+    grip1_key: str,
+    pose2_key: str,
+    grip2_key: str,
+    state_pose1: str,
+    state_pose2: str,
+    input_rot: str = "quat",
+    ref_rot: str = "quat",
+    input_quat: str = "xyzw",
+    ref_quat: str = "xyzw",
 ) -> dict[str, ActionKeyConfig]:
     return {
-        pose1_key: ActionKeyConfig(rep="rel_xyz_rot6d", state_key=state_pose1,
-                                   input_rotation_format=input_rot, reference_rotation_format=ref_rot,
-                                   input_quat_order=input_quat, reference_quat_order=ref_quat),
+        pose1_key: ActionKeyConfig(
+            rep="rel_xyz_rot6d",
+            state_key=state_pose1,
+            input_rotation_format=input_rot,
+            reference_rotation_format=ref_rot,
+            input_quat_order=input_quat,
+            reference_quat_order=ref_quat,
+        ),
         grip1_key: ActionKeyConfig(rep="absolute"),
-        pose2_key: ActionKeyConfig(rep="rel_xyz_rot6d", state_key=state_pose2,
-                                   input_rotation_format=input_rot, reference_rotation_format=ref_rot,
-                                   input_quat_order=input_quat, reference_quat_order=ref_quat),
+        pose2_key: ActionKeyConfig(
+            rep="rel_xyz_rot6d",
+            state_key=state_pose2,
+            input_rotation_format=input_rot,
+            reference_rotation_format=ref_rot,
+            input_quat_order=input_quat,
+            reference_quat_order=ref_quat,
+        ),
         grip2_key: ActionKeyConfig(rep="absolute"),
     }
 
@@ -77,19 +92,27 @@ EMBODIMENT_REGISTRY: dict[str, dict] = {
         "timestep_interval": 5,
         "video_keys": ["video.endoscope_left"],
         "state_keys": [
-            "state.psm1_pose", "state.psm1_gripper",
-            "state.psm2_pose", "state.psm2_gripper",
+            "state.psm1_pose",
+            "state.psm1_gripper",
+            "state.psm2_pose",
+            "state.psm2_gripper",
         ],
         "action_keys": [
-            "action.psm1_pose", "action.psm1_gripper",
-            "action.psm2_pose", "action.psm2_gripper",
+            "action.psm1_pose",
+            "action.psm1_gripper",
+            "action.psm2_pose",
+            "action.psm2_gripper",
         ],
         "action_key_configs": _dual_arm_eef_configs(
-            "action.psm1_pose", "action.psm1_gripper",
-            "action.psm2_pose", "action.psm2_gripper",
-            "state.psm1_pose", "state.psm2_pose",
+            "action.psm1_pose",
+            "action.psm1_gripper",
+            "action.psm2_pose",
+            "action.psm2_gripper",
+            "state.psm1_pose",
+            "state.psm2_pose",
         ),
-        "video_width": 512, "video_height": 288,
+        "video_width": 512,
+        "video_height": 288,
         "modality_filename": "meta/modality.json",
         "normalization_mode": "mean_std",
     },
@@ -100,19 +123,27 @@ EMBODIMENT_REGISTRY: dict[str, dict] = {
         "timestep_interval": 5,
         "video_keys": ["video.endoscope_left"],
         "state_keys": [
-            "state.psm1_pose", "state.psm1_gripper",
-            "state.psm2_pose", "state.psm2_gripper",
+            "state.psm1_pose",
+            "state.psm1_gripper",
+            "state.psm2_pose",
+            "state.psm2_gripper",
         ],
         "action_keys": [
-            "action.psm1_pose", "action.psm1_gripper",
-            "action.psm2_pose", "action.psm2_gripper",
+            "action.psm1_pose",
+            "action.psm1_gripper",
+            "action.psm2_pose",
+            "action.psm2_gripper",
         ],
         "action_key_configs": _dual_arm_eef_configs(
-            "action.psm1_pose", "action.psm1_gripper",
-            "action.psm2_pose", "action.psm2_gripper",
-            "state.psm1_pose", "state.psm2_pose",
+            "action.psm1_pose",
+            "action.psm1_gripper",
+            "action.psm2_pose",
+            "action.psm2_gripper",
+            "state.psm1_pose",
+            "state.psm2_pose",
         ),
-        "video_width": 512, "video_height": 288,
+        "video_width": 512,
+        "video_height": 288,
         "modality_filename": "meta/modality.json",
         "normalization_mode": "mean_std",
     },
@@ -128,27 +159,37 @@ EMBODIMENT_REGISTRY: dict[str, dict] = {
         "video_keys": ["video.camera_left"],
         "state_keys": [
             # Joint-angle + gripper state (normalized & concatenated as model input)
-            "state.psm1_joints", "state.psm1_gripper",
-            "state.psm2_joints", "state.psm2_gripper",
+            "state.psm1_joints",
+            "state.psm1_gripper",
+            "state.psm2_joints",
+            "state.psm2_gripper",
             # Cartesian pose (pass-through for REL_XYZ_ROT6D reference only)
-            "state.psm1_pose", "state.psm2_pose",
+            "state.psm1_pose",
+            "state.psm2_pose",
         ],
         # Pass-through state keys: loaded and used by GenericRelativeActionTransform
         # as the reference frame for REL_XYZ_ROT6D conversion, but NOT normalized
         # or concatenated into the model's state input vector.
         "pass_through_state_keys": [
-            "state.psm1_pose", "state.psm2_pose",
+            "state.psm1_pose",
+            "state.psm2_pose",
         ],
         "action_keys": [
-            "action.psm1_pose", "action.psm1_gripper",
-            "action.psm2_pose", "action.psm2_gripper",
+            "action.psm1_pose",
+            "action.psm1_gripper",
+            "action.psm2_pose",
+            "action.psm2_gripper",
         ],
         "action_key_configs": _dual_arm_eef_configs(
-            "action.psm1_pose", "action.psm1_gripper",
-            "action.psm2_pose", "action.psm2_gripper",
-            "state.psm1_pose", "state.psm2_pose",
+            "action.psm1_pose",
+            "action.psm1_gripper",
+            "action.psm2_pose",
+            "action.psm2_gripper",
+            "state.psm1_pose",
+            "state.psm2_pose",
         ),
-        "video_width": 512, "video_height": 288,
+        "video_width": 512,
+        "video_height": 288,
         "modality_filename": "meta/modality.json",
         "normalization_mode": "mean_std",
     },
@@ -160,20 +201,29 @@ EMBODIMENT_REGISTRY: dict[str, dict] = {
         "timestep_interval": 3,
         "video_keys": ["video.endoscope"],
         "state_keys": [
-            "state.left_arm_pose", "state.left_arm_gripper",
-            "state.right_arm_pose", "state.right_arm_gripper",
+            "state.left_arm_pose",
+            "state.left_arm_gripper",
+            "state.right_arm_pose",
+            "state.right_arm_gripper",
         ],
         "action_keys": [
-            "action.left_arm_pose", "action.left_arm_gripper",
-            "action.right_arm_pose", "action.right_arm_gripper",
+            "action.left_arm_pose",
+            "action.left_arm_gripper",
+            "action.right_arm_pose",
+            "action.right_arm_gripper",
         ],
         "action_key_configs": _dual_arm_eef_configs(
-            "action.left_arm_pose", "action.left_arm_gripper",
-            "action.right_arm_pose", "action.right_arm_gripper",
-            "state.left_arm_pose", "state.right_arm_pose",
-            input_quat="wxyz", ref_quat="wxyz",
+            "action.left_arm_pose",
+            "action.left_arm_gripper",
+            "action.right_arm_pose",
+            "action.right_arm_gripper",
+            "state.left_arm_pose",
+            "state.right_arm_pose",
+            input_quat="wxyz",
+            ref_quat="wxyz",
         ),
-        "video_width": 512, "video_height": 288,
+        "video_width": 512,
+        "video_height": 288,
         "modality_filename": "meta/modality.json",
         "normalization_mode": "mean_std",
     },
@@ -185,20 +235,29 @@ EMBODIMENT_REGISTRY: dict[str, dict] = {
         "timestep_interval": 3,
         "video_keys": ["video.camera_left"],
         "state_keys": [
-            "state.psm_retraction_pose", "state.psm_retraction_gripper",
-            "state.psm_cutter_pose", "state.psm_cutter_gripper",
+            "state.psm_retraction_pose",
+            "state.psm_retraction_gripper",
+            "state.psm_cutter_pose",
+            "state.psm_cutter_gripper",
         ],
         "action_keys": [
-            "action.psm_retraction_pose", "action.psm_retraction_gripper",
-            "action.psm_cutter_pose", "action.psm_cutter_gripper",
+            "action.psm_retraction_pose",
+            "action.psm_retraction_gripper",
+            "action.psm_cutter_pose",
+            "action.psm_cutter_gripper",
         ],
         "action_key_configs": _dual_arm_eef_configs(
-            "action.psm_retraction_pose", "action.psm_retraction_gripper",
-            "action.psm_cutter_pose", "action.psm_cutter_gripper",
-            "state.psm_retraction_pose", "state.psm_cutter_pose",
-            input_quat="wxyz", ref_quat="wxyz",
+            "action.psm_retraction_pose",
+            "action.psm_retraction_gripper",
+            "action.psm_cutter_pose",
+            "action.psm_cutter_gripper",
+            "state.psm_retraction_pose",
+            "state.psm_cutter_pose",
+            input_quat="wxyz",
+            ref_quat="wxyz",
         ),
-        "video_width": 512, "video_height": 288,
+        "video_width": 512,
+        "video_height": 288,
         "modality_filename": "meta/modality.json",
         "normalization_mode": "mean_std",
     },
@@ -213,16 +272,19 @@ EMBODIMENT_REGISTRY: dict[str, dict] = {
         "timestep_interval": 2,
         "video_keys": ["video.endoscope_left"],
         "state_keys": [
-            "state.left_joints", "state.right_joints",
+            "state.left_joints",
+            "state.right_joints",
         ],
         "action_keys": [
-            "action.left_joints", "action.right_joints",
+            "action.left_joints",
+            "action.right_joints",
         ],
         "action_key_configs": {
             "action.left_joints": ActionKeyConfig(rep="relative", state_key="state.left_joints"),
             "action.right_joints": ActionKeyConfig(rep="relative", state_key="state.right_joints"),
         },
-        "video_width": 512, "video_height": 288,
+        "video_width": 512,
+        "video_height": 288,
         "modality_filename": "meta/modality.json",
         "normalization_mode": "mean_std",
     },
@@ -233,19 +295,27 @@ EMBODIMENT_REGISTRY: dict[str, dict] = {
         "timestep_interval": 5,
         "video_keys": ["video.endoscope_left"],
         "state_keys": [
-            "state.psm1_pose", "state.psm1_gripper",
-            "state.psm2_pose", "state.psm2_gripper",
+            "state.psm1_pose",
+            "state.psm1_gripper",
+            "state.psm2_pose",
+            "state.psm2_gripper",
         ],
         "action_keys": [
-            "action.psm1_pose", "action.psm1_gripper",
-            "action.psm2_pose", "action.psm2_gripper",
+            "action.psm1_pose",
+            "action.psm1_gripper",
+            "action.psm2_pose",
+            "action.psm2_gripper",
         ],
         "action_key_configs": _dual_arm_eef_configs(
-            "action.psm1_pose", "action.psm1_gripper",
-            "action.psm2_pose", "action.psm2_gripper",
-            "state.psm1_pose", "state.psm2_pose",
+            "action.psm1_pose",
+            "action.psm1_gripper",
+            "action.psm2_pose",
+            "action.psm2_gripper",
+            "state.psm1_pose",
+            "state.psm2_pose",
         ),
-        "video_width": 512, "video_height": 288,
+        "video_width": 512,
+        "video_height": 288,
         "modality_filename": "meta/modality.json",
         "normalization_mode": "mean_std",
     },
@@ -256,24 +326,45 @@ EMBODIMENT_REGISTRY: dict[str, dict] = {
         "timestep_interval": 3,
         "video_keys": ["video.endoscope"],
         "state_keys": [
-            "state.left_pose", "state.right_pose",
-            "state.lap_pose", "state.aux_pose",
+            "state.left_pose",
+            "state.right_pose",
+            "state.lap_pose",
+            "state.aux_pose",
         ],
         "action_keys": [
-            "action.left_pose", "action.right_pose",
-            "action.lap_pose", "action.aux_pose",
+            "action.left_pose",
+            "action.right_pose",
+            "action.lap_pose",
+            "action.aux_pose",
         ],
         "action_key_configs": {
-            "action.left_pose": ActionKeyConfig(rep="rel_xyz_rot6d", state_key="state.left_pose",
-                                                input_rotation_format="euler", reference_rotation_format="euler"),
-            "action.right_pose": ActionKeyConfig(rep="rel_xyz_rot6d", state_key="state.right_pose",
-                                                 input_rotation_format="euler", reference_rotation_format="euler"),
-            "action.lap_pose": ActionKeyConfig(rep="rel_xyz_rot6d", state_key="state.lap_pose",
-                                               input_rotation_format="euler", reference_rotation_format="euler"),
-            "action.aux_pose": ActionKeyConfig(rep="rel_xyz_rot6d", state_key="state.aux_pose",
-                                               input_rotation_format="euler", reference_rotation_format="euler"),
+            "action.left_pose": ActionKeyConfig(
+                rep="rel_xyz_rot6d",
+                state_key="state.left_pose",
+                input_rotation_format="euler",
+                reference_rotation_format="euler",
+            ),
+            "action.right_pose": ActionKeyConfig(
+                rep="rel_xyz_rot6d",
+                state_key="state.right_pose",
+                input_rotation_format="euler",
+                reference_rotation_format="euler",
+            ),
+            "action.lap_pose": ActionKeyConfig(
+                rep="rel_xyz_rot6d",
+                state_key="state.lap_pose",
+                input_rotation_format="euler",
+                reference_rotation_format="euler",
+            ),
+            "action.aux_pose": ActionKeyConfig(
+                rep="rel_xyz_rot6d",
+                state_key="state.aux_pose",
+                input_rotation_format="euler",
+                reference_rotation_format="euler",
+            ),
         },
-        "video_width": 512, "video_height": 288,
+        "video_width": 512,
+        "video_height": 288,
         "modality_filename": "meta/modality.json",
         "normalization_mode": "mean_std",
     },
@@ -284,20 +375,29 @@ EMBODIMENT_REGISTRY: dict[str, dict] = {
         "timestep_interval": 3,
         "video_keys": ["video.endoscope_left"],
         "state_keys": [
-            "state.psm1_pose", "state.psm1_gripper",
-            "state.psm2_pose", "state.psm2_gripper",
+            "state.psm1_pose",
+            "state.psm1_gripper",
+            "state.psm2_pose",
+            "state.psm2_gripper",
         ],
         "action_keys": [
-            "action.psm1_pose", "action.psm1_gripper",
-            "action.psm2_pose", "action.psm2_gripper",
+            "action.psm1_pose",
+            "action.psm1_gripper",
+            "action.psm2_pose",
+            "action.psm2_gripper",
         ],
         "action_key_configs": _dual_arm_eef_configs(
-            "action.psm1_pose", "action.psm1_gripper",
-            "action.psm2_pose", "action.psm2_gripper",
-            "state.psm1_pose", "state.psm2_pose",
-            input_rot="euler", ref_rot="euler",
+            "action.psm1_pose",
+            "action.psm1_gripper",
+            "action.psm2_pose",
+            "action.psm2_gripper",
+            "state.psm1_pose",
+            "state.psm2_pose",
+            input_rot="euler",
+            ref_rot="euler",
         ),
-        "video_width": 512, "video_height": 288,
+        "video_width": 512,
+        "video_height": 288,
         "modality_filename": "meta/modality.json",
         "normalization_mode": "mean_std",
     },
@@ -308,16 +408,19 @@ EMBODIMENT_REGISTRY: dict[str, dict] = {
         "timestep_interval": 3,
         "video_keys": ["video.endoscope"],
         "state_keys": [
-            "state.psm_cartesian_pose", "state.psm_gripper",
+            "state.psm_cartesian_pose",
+            "state.psm_gripper",
         ],
         "action_keys": [
-            "action.psm_cartesian_pose", "action.psm_gripper",
+            "action.psm_cartesian_pose",
+            "action.psm_gripper",
         ],
         "action_key_configs": {
             "action.psm_cartesian_pose": ActionKeyConfig(rep="rel_xyz_rot6d", state_key="state.psm_cartesian_pose"),
             "action.psm_gripper": ActionKeyConfig(rep="absolute"),
         },
-        "video_width": 512, "video_height": 288,
+        "video_width": 512,
+        "video_height": 288,
         "modality_filename": "meta/modality.json",
         "normalization_mode": "mean_std",
     },
@@ -330,16 +433,19 @@ EMBODIMENT_REGISTRY: dict[str, dict] = {
         "timestep_interval": 3,
         "video_keys": ["video.scope"],
         "state_keys": [
-            "state.right_arm_joints", "state.left_arm_joints",
+            "state.right_arm_joints",
+            "state.left_arm_joints",
         ],
         "action_keys": [
-            "action.right_arm_delta_xyz", "action.left_arm_delta_xyz",
+            "action.right_arm_delta_xyz",
+            "action.left_arm_delta_xyz",
         ],
         "action_key_configs": {
             "action.right_arm_delta_xyz": ActionKeyConfig(rep="delta"),
             "action.left_arm_delta_xyz": ActionKeyConfig(rep="delta"),
         },
-        "video_width": 512, "video_height": 288,
+        "video_width": 512,
+        "video_height": 288,
         "modality_filename": "meta/modality.json",
         "normalization_mode": "mean_std",
     },
@@ -350,20 +456,29 @@ EMBODIMENT_REGISTRY: dict[str, dict] = {
         "timestep_interval": 1,
         "video_keys": ["video.endoscope_left"],
         "state_keys": [
-            "state.psm1_pose", "state.psm1_gripper",
-            "state.psm2_pose", "state.psm2_gripper",
+            "state.psm1_pose",
+            "state.psm1_gripper",
+            "state.psm2_pose",
+            "state.psm2_gripper",
         ],
         "action_keys": [
-            "action.psm1_pose", "action.psm1_gripper",
-            "action.psm2_pose", "action.psm2_gripper",
+            "action.psm1_pose",
+            "action.psm1_gripper",
+            "action.psm2_pose",
+            "action.psm2_gripper",
         ],
         "action_key_configs": _dual_arm_eef_configs(
-            "action.psm1_pose", "action.psm1_gripper",
-            "action.psm2_pose", "action.psm2_gripper",
-            "state.psm1_pose", "state.psm2_pose",
-            input_quat="xyzw", ref_quat="xyzw",
+            "action.psm1_pose",
+            "action.psm1_gripper",
+            "action.psm2_pose",
+            "action.psm2_gripper",
+            "state.psm1_pose",
+            "state.psm2_pose",
+            input_quat="xyzw",
+            ref_quat="xyzw",
         ),
-        "video_width": 512, "video_height": 288,
+        "video_width": 512,
+        "video_height": 288,
         "modality_filename": "meta/modality.json",
         "normalization_mode": "mean_std",
     },
@@ -374,20 +489,29 @@ EMBODIMENT_REGISTRY: dict[str, dict] = {
         "timestep_interval": 1,
         "video_keys": ["video.endoscope_left"],
         "state_keys": [
-            "state.psm1_pose", "state.psm1_gripper",
-            "state.psm2_pose", "state.psm2_gripper",
+            "state.psm1_pose",
+            "state.psm1_gripper",
+            "state.psm2_pose",
+            "state.psm2_gripper",
         ],
         "action_keys": [
-            "action.psm1_pose", "action.psm1_gripper",
-            "action.psm2_pose", "action.psm2_gripper",
+            "action.psm1_pose",
+            "action.psm1_gripper",
+            "action.psm2_pose",
+            "action.psm2_gripper",
         ],
         "action_key_configs": _dual_arm_eef_configs(
-            "action.psm1_pose", "action.psm1_gripper",
-            "action.psm2_pose", "action.psm2_gripper",
-            "state.psm1_pose", "state.psm2_pose",
-            input_quat="xyzw", ref_quat="xyzw",
+            "action.psm1_pose",
+            "action.psm1_gripper",
+            "action.psm2_pose",
+            "action.psm2_gripper",
+            "state.psm1_pose",
+            "state.psm2_pose",
+            input_quat="xyzw",
+            ref_quat="xyzw",
         ),
-        "video_width": 512, "video_height": 288,
+        "video_width": 512,
+        "video_height": 288,
         "modality_filename": "meta/modality.json",
         "normalization_mode": "mean_std",
     },
@@ -398,17 +522,21 @@ EMBODIMENT_REGISTRY: dict[str, dict] = {
         "timestep_interval": 3,
         "video_keys": ["video.laparoscope_left"],
         "state_keys": [
-            "state.eef_pose", "state.gripper",
+            "state.eef_pose",
+            "state.gripper",
         ],
         "action_keys": [
-            "action.eef_pose", "action.gripper",
+            "action.eef_pose",
+            "action.gripper",
         ],
         "action_key_configs": {
-            "action.eef_pose": ActionKeyConfig(rep="rel_xyz_rot6d", state_key="state.eef_pose",
-                                               reference_quat_order="xyzw"),
+            "action.eef_pose": ActionKeyConfig(
+                rep="rel_xyz_rot6d", state_key="state.eef_pose", reference_quat_order="xyzw"
+            ),
             "action.gripper": ActionKeyConfig(rep="absolute"),
         },
-        "video_width": 512, "video_height": 288,
+        "video_width": 512,
+        "video_height": 288,
         "modality_filename": "meta/modality.json",
         "normalization_mode": "mean_std",
     },
@@ -419,16 +547,19 @@ EMBODIMENT_REGISTRY: dict[str, dict] = {
         "timestep_interval": 3,
         "video_keys": ["video.endoscope_left"],
         "state_keys": [
-            "state.psm1_pose", "state.psm2_pose",
+            "state.psm1_pose",
+            "state.psm2_pose",
         ],
         "action_keys": [
-            "action.psm1_pose", "action.psm2_pose",
+            "action.psm1_pose",
+            "action.psm2_pose",
         ],
         "action_key_configs": {
             "action.psm1_pose": ActionKeyConfig(rep="rel_xyz_rot6d", state_key="state.psm1_pose"),
             "action.psm2_pose": ActionKeyConfig(rep="rel_xyz_rot6d", state_key="state.psm2_pose"),
         },
-        "video_width": 512, "video_height": 288,
+        "video_width": 512,
+        "video_height": 288,
         "modality_filename": "meta/modality.json",
         "normalization_mode": "mean_std",
     },
@@ -479,65 +610,202 @@ MAX_ACTION_DIM = 44
 _OPEN_H_BASE = "/lustre/fsw/portfolios/healthcareeng/projects/healthcareeng_holoscan/datasets/Open-H"
 _JHU_BASE = "/lustre/fsw/portfolios/healthcareeng/users/lzbinden/cache/huggingface/lerobot/jhu"
 _LSCR_BASE = f"{_OPEN_H_BASE}/Surgical/JHU/LSCR"
-_STANFORD_BASE = f"{_OPEN_H_BASE}/Surgical/Stanford/Collaborative Haptics and Robotics in Medicine Lab/Real Robot (dVRK)"
+_STANFORD_BASE = (
+    f"{_OPEN_H_BASE}/Surgical/Stanford/Collaborative Haptics and Robotics in Medicine Lab/Real Robot (dVRK)"
+)
 
 OPEN_H_DATASET_SPECS: list[dict] = [
     # ===== CMR Versius (50% of total, 4 procedures) =====
     # CMR endoscope is monocular by nature — no stereo/mono distinction.
     # mix_ratio: 1.0 each × 4 = 4.0 total (50%)
-    {"path": f"{_OPEN_H_BASE}/cmr-surgical-60hz-fixed/cholecystectomy_360p", "embodiment": EmbodimentTag.CMR_VERSIUS, "mix_ratio": 1.0},
-    {"path": f"{_OPEN_H_BASE}/cmr-surgical-60hz-fixed/hysterectomy_360p", "embodiment": EmbodimentTag.CMR_VERSIUS, "mix_ratio": 1.0},
-    {"path": f"{_OPEN_H_BASE}/cmr-surgical-60hz-fixed/inguinal_hernia_360p", "embodiment": EmbodimentTag.CMR_VERSIUS, "mix_ratio": 1.0},
-    {"path": f"{_OPEN_H_BASE}/cmr-surgical-60hz-fixed/prostatectomy_360p", "embodiment": EmbodimentTag.CMR_VERSIUS, "mix_ratio": 1.0},
+    {
+        "path": f"{_OPEN_H_BASE}/cmr-surgical-60hz-fixed/cholecystectomy_360p",
+        "embodiment": EmbodimentTag.CMR_VERSIUS,
+        "mix_ratio": 1.0,
+    },
+    {
+        "path": f"{_OPEN_H_BASE}/cmr-surgical-60hz-fixed/hysterectomy_360p",
+        "embodiment": EmbodimentTag.CMR_VERSIUS,
+        "mix_ratio": 1.0,
+    },
+    {
+        "path": f"{_OPEN_H_BASE}/cmr-surgical-60hz-fixed/inguinal_hernia_360p",
+        "embodiment": EmbodimentTag.CMR_VERSIUS,
+        "mix_ratio": 1.0,
+    },
+    {
+        "path": f"{_OPEN_H_BASE}/cmr-surgical-60hz-fixed/prostatectomy_360p",
+        "embodiment": EmbodimentTag.CMR_VERSIUS,
+        "mix_ratio": 1.0,
+    },
     # ===== dVRK JHU — ALL monocular (endoscope_left only), subtotal: 2.015 =====
-    {"path": f"{_JHU_BASE}/srth_porcine_chole_fix", "embodiment": EmbodimentTag.JHU_DVRK_MONO, "mix_ratio": 1.369},   # 1,878,393 frames
-    {"path": f"{_JHU_BASE}/electrocautery_tumor_resection_fix", "embodiment": EmbodimentTag.JHU_DVRK_MONO, "mix_ratio": 0.160},   # 219,007 frames
-    {"path": f"{_JHU_BASE}/suturebot_2", "embodiment": EmbodimentTag.JHU_DVRK_MONO, "mix_ratio": 0.178},   # 243,701 frames
-    {"path": f"{_JHU_BASE}/suturebot_3", "embodiment": EmbodimentTag.JHU_DVRK_MONO, "mix_ratio": 0.134},   # 183,366 frames
-    {"path": f"{_JHU_BASE}/suturebot_tissue_2", "embodiment": EmbodimentTag.JHU_DVRK_MONO, "mix_ratio": 0.077},   # 105,356 frames
-    {"path": f"{_JHU_BASE}/srt_needle_pickup+handover", "embodiment": EmbodimentTag.JHU_DVRK_MONO, "mix_ratio": 0.042},   # 58,305 frames
-    {"path": f"{_JHU_BASE}/suturing_Jesse_processed_fix", "embodiment": EmbodimentTag.JHU_DVRK_MONO, "mix_ratio": 0.024},   # 32,764 frames
-    {"path": f"{_JHU_BASE}/srt_tissue_lift", "embodiment": EmbodimentTag.JHU_DVRK_MONO, "mix_ratio": 0.020},   # 27,487 frames
-    {"path": f"{_JHU_BASE}/jesse_pickup_only", "embodiment": EmbodimentTag.JHU_DVRK_MONO, "mix_ratio": 0.011},   # 15,659 frames
+    {
+        "path": f"{_JHU_BASE}/srth_porcine_chole_fix",
+        "embodiment": EmbodimentTag.JHU_DVRK_MONO,
+        "mix_ratio": 1.369,
+    },  # 1,878,393 frames
+    {
+        "path": f"{_JHU_BASE}/electrocautery_tumor_resection_fix",
+        "embodiment": EmbodimentTag.JHU_DVRK_MONO,
+        "mix_ratio": 0.160,
+    },  # 219,007 frames
+    {
+        "path": f"{_JHU_BASE}/suturebot_2",
+        "embodiment": EmbodimentTag.JHU_DVRK_MONO,
+        "mix_ratio": 0.178,
+    },  # 243,701 frames
+    {
+        "path": f"{_JHU_BASE}/suturebot_3",
+        "embodiment": EmbodimentTag.JHU_DVRK_MONO,
+        "mix_ratio": 0.134,
+    },  # 183,366 frames
+    {
+        "path": f"{_JHU_BASE}/suturebot_tissue_2",
+        "embodiment": EmbodimentTag.JHU_DVRK_MONO,
+        "mix_ratio": 0.077,
+    },  # 105,356 frames
+    {
+        "path": f"{_JHU_BASE}/srt_needle_pickup+handover",
+        "embodiment": EmbodimentTag.JHU_DVRK_MONO,
+        "mix_ratio": 0.042,
+    },  # 58,305 frames
+    {
+        "path": f"{_JHU_BASE}/suturing_Jesse_processed_fix",
+        "embodiment": EmbodimentTag.JHU_DVRK_MONO,
+        "mix_ratio": 0.024,
+    },  # 32,764 frames
+    {
+        "path": f"{_JHU_BASE}/srt_tissue_lift",
+        "embodiment": EmbodimentTag.JHU_DVRK_MONO,
+        "mix_ratio": 0.020,
+    },  # 27,487 frames
+    {
+        "path": f"{_JHU_BASE}/jesse_pickup_only",
+        "embodiment": EmbodimentTag.JHU_DVRK_MONO,
+        "mix_ratio": 0.011,
+    },  # 15,659 frames
     # ===== LSCR ARCADE (monocular, same dVRK action space), subtotal: 0.133 =====
     # Uses JHU_DVRK_MONO since Cosmos is monocular (endoscope_left only).
-    {"path": f"{_LSCR_BASE}/ARCADE/Cholecystectomy", "embodiment": EmbodimentTag.JHU_DVRK_MONO, "mix_ratio": 0.130},   # 177,808 frames
-    {"path": f"{_LSCR_BASE}/ARCADE/cautery", "embodiment": EmbodimentTag.JHU_DVRK_MONO, "mix_ratio": 0.004, "exclude_splits": ["missing_videos"]},   # 5,288 frames
+    {
+        "path": f"{_LSCR_BASE}/ARCADE/Cholecystectomy",
+        "embodiment": EmbodimentTag.JHU_DVRK_MONO,
+        "mix_ratio": 0.130,
+    },  # 177,808 frames
+    {
+        "path": f"{_LSCR_BASE}/ARCADE/cautery",
+        "embodiment": EmbodimentTag.JHU_DVRK_MONO,
+        "mix_ratio": 0.004,
+        "exclude_splits": ["missing_videos"],
+    },  # 5,288 frames
     # ===== Stanford Real (Euler RPY), subtotal: 0.637 =====
     # Excludes failed and bad-frame episodes per gr00t-H exp86.
-    {"path": f"{_STANFORD_BASE}/Needle Transfer", "embodiment": EmbodimentTag.DVRK_STANFORD_REAL, "mix_ratio": 0.229, "exclude_splits": ["fail", "bad_frames"]},   # 313,882 frames
-    {"path": f"{_STANFORD_BASE}/Tissue Retraction", "embodiment": EmbodimentTag.DVRK_STANFORD_REAL, "mix_ratio": 0.213},   # 291,700 frames
-    {"path": f"{_STANFORD_BASE}/Peg Transfer", "embodiment": EmbodimentTag.DVRK_STANFORD_REAL, "mix_ratio": 0.196, "exclude_splits": ["fail"]},   # 268,855 frames
+    {
+        "path": f"{_STANFORD_BASE}/Needle Transfer",
+        "embodiment": EmbodimentTag.DVRK_STANFORD_REAL,
+        "mix_ratio": 0.229,
+        "exclude_splits": ["fail", "bad_frames"],
+    },  # 313,882 frames
+    {
+        "path": f"{_STANFORD_BASE}/Tissue Retraction",
+        "embodiment": EmbodimentTag.DVRK_STANFORD_REAL,
+        "mix_ratio": 0.213,
+    },  # 291,700 frames
+    {
+        "path": f"{_STANFORD_BASE}/Peg Transfer",
+        "embodiment": EmbodimentTag.DVRK_STANFORD_REAL,
+        "mix_ratio": 0.196,
+        "exclude_splits": ["fail"],
+    },  # 268,855 frames
     # ===== Hamlyn 30Hz (endoscope_left only), subtotal: 0.397 =====
-    {"path": f"{_OPEN_H_BASE}/Surgical/Hamlyn/Suturing-2", "embodiment": EmbodimentTag.HAMLYN_30HZ, "mix_ratio": 0.183},   # 251,355 frames
-    {"path": f"{_OPEN_H_BASE}/Surgical/Hamlyn/peg_transfer", "embodiment": EmbodimentTag.HAMLYN_30HZ, "mix_ratio": 0.074},   # 102,187 frames
-    {"path": f"{_OPEN_H_BASE}/Surgical/Hamlyn/Suturing-1", "embodiment": EmbodimentTag.HAMLYN_30HZ, "mix_ratio": 0.073},   # 100,067 frames
-    {"path": f"{_OPEN_H_BASE}/Surgical/Hamlyn/needle_grasp_and_handover", "embodiment": EmbodimentTag.HAMLYN_30HZ, "mix_ratio": 0.034},   # 46,582 frames
-    {"path": f"{_OPEN_H_BASE}/Surgical/Hamlyn/knot_tying", "embodiment": EmbodimentTag.HAMLYN_30HZ, "mix_ratio": 0.022},   # 30,222 frames
-    {"path": f"{_OPEN_H_BASE}/Surgical/Hamlyn/Tissue_Retraction", "embodiment": EmbodimentTag.HAMLYN_30HZ, "mix_ratio": 0.010},   # 14,160 frames
+    {
+        "path": f"{_OPEN_H_BASE}/Surgical/Hamlyn/Suturing-2",
+        "embodiment": EmbodimentTag.HAMLYN_30HZ,
+        "mix_ratio": 0.183,
+    },  # 251,355 frames
+    {
+        "path": f"{_OPEN_H_BASE}/Surgical/Hamlyn/peg_transfer",
+        "embodiment": EmbodimentTag.HAMLYN_30HZ,
+        "mix_ratio": 0.074,
+    },  # 102,187 frames
+    {
+        "path": f"{_OPEN_H_BASE}/Surgical/Hamlyn/Suturing-1",
+        "embodiment": EmbodimentTag.HAMLYN_30HZ,
+        "mix_ratio": 0.073,
+    },  # 100,067 frames
+    {
+        "path": f"{_OPEN_H_BASE}/Surgical/Hamlyn/needle_grasp_and_handover",
+        "embodiment": EmbodimentTag.HAMLYN_30HZ,
+        "mix_ratio": 0.034,
+    },  # 46,582 frames
+    {
+        "path": f"{_OPEN_H_BASE}/Surgical/Hamlyn/knot_tying",
+        "embodiment": EmbodimentTag.HAMLYN_30HZ,
+        "mix_ratio": 0.022,
+    },  # 30,222 frames
+    {
+        "path": f"{_OPEN_H_BASE}/Surgical/Hamlyn/Tissue_Retraction",
+        "embodiment": EmbodimentTag.HAMLYN_30HZ,
+        "mix_ratio": 0.010,
+    },  # 14,160 frames
     # ===== Turin MITIC ex vivo, subtotal: 0.283 =====
     # Excludes failed episodes per gr00t-H exp86.
-    {"path": f"{_OPEN_H_BASE}/Surgical/Turin/mitic_lerobot_ex_vivo", "embodiment": EmbodimentTag.TURIN_MITIC_EX_VIVO, "mix_ratio": 0.283, "exclude_splits": ["failure"]},   # 388,690 frames
+    {
+        "path": f"{_OPEN_H_BASE}/Surgical/Turin/mitic_lerobot_ex_vivo",
+        "embodiment": EmbodimentTag.TURIN_MITIC_EX_VIVO,
+        "mix_ratio": 0.283,
+        "exclude_splits": ["failure"],
+    },  # 388,690 frames
     # ===== UCSD, subtotal: 0.230 =====
-    {"path": f"{_OPEN_H_BASE}/Surgical/UCSD/surgical_learning_dataset", "embodiment": EmbodimentTag.DVRK_UCSD, "mix_ratio": 0.210},   # 288,604 frames
-    {"path": f"{_OPEN_H_BASE}/Surgical/UCSD/surgical_learning_dataset2", "embodiment": EmbodimentTag.DVRK_UCSD, "mix_ratio": 0.019},   # 26,313 frames
+    {
+        "path": f"{_OPEN_H_BASE}/Surgical/UCSD/surgical_learning_dataset",
+        "embodiment": EmbodimentTag.DVRK_UCSD,
+        "mix_ratio": 0.210,
+    },  # 288,604 frames
+    {
+        "path": f"{_OPEN_H_BASE}/Surgical/UCSD/surgical_learning_dataset2",
+        "embodiment": EmbodimentTag.DVRK_UCSD,
+        "mix_ratio": 0.019,
+    },  # 26,313 frames
     # ===== UCB Debridement, subtotal: 0.162 =====
-    {"path": f"{_OPEN_H_BASE}/Surgical/UCBerkeley/debridement_lerobot", "embodiment": EmbodimentTag.DVRK_UCB, "mix_ratio": 0.162},   # 221,950 frames
+    {
+        "path": f"{_OPEN_H_BASE}/Surgical/UCBerkeley/debridement_lerobot",
+        "embodiment": EmbodimentTag.DVRK_UCB,
+        "mix_ratio": 0.162,
+    },  # 221,950 frames
     # ===== USTC Torin, subtotal: 0.135 =====
-    {"path": f"{_OPEN_H_BASE}/Surgical/USTC/knot_tying_all", "embodiment": EmbodimentTag.USTC_TORIN, "mix_ratio": 0.081},   # 110,652 frames
-    {"path": f"{_OPEN_H_BASE}/Surgical/USTC/needle_handover_all", "embodiment": EmbodimentTag.USTC_TORIN, "mix_ratio": 0.013},   # 17,495 frames
-    {"path": f"{_OPEN_H_BASE}/Surgical/USTC/needle_pickup_all", "embodiment": EmbodimentTag.USTC_TORIN, "mix_ratio": 0.042},   # 57,172 frames
+    {
+        "path": f"{_OPEN_H_BASE}/Surgical/USTC/knot_tying_all",
+        "embodiment": EmbodimentTag.USTC_TORIN,
+        "mix_ratio": 0.081,
+    },  # 110,652 frames
+    {
+        "path": f"{_OPEN_H_BASE}/Surgical/USTC/needle_handover_all",
+        "embodiment": EmbodimentTag.USTC_TORIN,
+        "mix_ratio": 0.013,
+    },  # 17,495 frames
+    {
+        "path": f"{_OPEN_H_BASE}/Surgical/USTC/needle_pickup_all",
+        "embodiment": EmbodimentTag.USTC_TORIN,
+        "mix_ratio": 0.042,
+    },  # 57,172 frames
     # ===== Moon Surgical, subtotal: 0.009 =====
     # Excludes episodes with missing scope videos per gr00t-H exp86.
-    {"path": f"{_OPEN_H_BASE}/Surgical/Moon/moon", "embodiment": EmbodimentTag.MOON, "mix_ratio": 0.009, "exclude_splits": ["missing_scope_videos"]},   # 12,020 frames
+    {
+        "path": f"{_OPEN_H_BASE}/Surgical/Moon/moon",
+        "embodiment": EmbodimentTag.MOON,
+        "mix_ratio": 0.009,
+        "exclude_splits": ["missing_scope_videos"],
+    },  # 12,020 frames
 ]
 
 # Derived: the set of all Open-H embodiment tag strings.
 # Used by dataset.py to enforce stats_cosmos.json requirement.
 # Includes both EMBODIMENT_REGISTRY keys (non-CMR) and all tags from the specs.
 OPEN_H_EMBODIMENT_TAGS: frozenset[str] = frozenset(
-    {(spec["embodiment"].value if isinstance(spec["embodiment"], EmbodimentTag) else spec["embodiment"])
-     for spec in OPEN_H_DATASET_SPECS}
+    {
+        (spec["embodiment"].value if isinstance(spec["embodiment"], EmbodimentTag) else spec["embodiment"])
+        for spec in OPEN_H_DATASET_SPECS
+    }
     | set(EMBODIMENT_REGISTRY.keys())
 )
 
@@ -783,10 +1051,10 @@ def construct_modality_config_and_transforms(num_frames, embodiment, downscaled_
         # CMR Versius surgical robot configuration
         # Original data is 60Hz, using FRAME_STRIDE=6 for 10fps effective rate
         timestep_interval = 6
-        
+
         # Video: 13 frames (1 context + 12 prediction)
         video_delta_indices = list(range(0, num_frames * timestep_interval, timestep_interval))
-        
+
         # Action: 12 timesteps (only for the 12 prediction frames, not context)
         # The model expects num_actions to be divisible by temporal_compression_ratio (4)
         # 12 actions / 4 = 3 latent temporal positions, each getting action embedding
@@ -794,7 +1062,7 @@ def construct_modality_config_and_transforms(num_frames, embodiment, downscaled_
         # the action at t=0 represents the transition FROM frame 0 TO frame 1
         num_action_frames = num_frames - 1  # 12 action timesteps for 13 video frames
         action_delta_indices = list(range(0, num_action_frames * timestep_interval, timestep_interval))
-        
+
         config = {
             "video": ModalityConfig(
                 delta_indices=video_delta_indices,
@@ -839,7 +1107,7 @@ def construct_modality_config_and_transforms(num_frames, embodiment, downscaled_
                     "action.clutchBtn_left",
                     "action.clutchBtn_right",
                     # Engagement status (pass-through for clutch-aware processing)
-                    #Note: hapticengaged keys (without cond_ prefix) are used for clutch-aware processing but removed after
+                    # Note: hapticengaged keys (without cond_ prefix) are used for clutch-aware processing but removed after
                     "action.hapticengaged_left",
                     "action.hapticengaged_right",
                     # =====================================================
@@ -911,7 +1179,7 @@ def construct_modality_config_and_transforms(num_frames, embodiment, downscaled_
         height = 480 if not downscaled_res else 256
     elif embodiment == "cmr_versius":
         # CMR Versius endoscope video resolution (original: 1920x1080, 16:9 aspect ratio)
-        # 
+        #
         # IMPORTANT: Resolution must be divisible by 16 (8x VAE compression × 2 patch size)
         # Valid 16:9 options: 512x288, 768x432, 1024x576, 1280x720
         # Invalid: 384x216 (216/16=13.5), 320x180 (180/16=11.25)
@@ -936,7 +1204,7 @@ def construct_modality_config_and_transforms(num_frames, embodiment, downscaled_
         #   State conditioning (14D, sampled at action timesteps):
         #     - haptic_engaged(2D) + armlinkedtohaptic(2D) + instrtype(4D) + color(4D) + electroSurgeryMode(2D) = 14D
         # Note: hapticengaged keys (without cond_ prefix) are used for clutch-aware processing but removed after
-        
+
         # Keys that get concatenated into final conditioning tensor (exclude pass-through keys)
         cmr_action_output_keys = [
             # === ACTIONS (30D) ===
@@ -971,7 +1239,7 @@ def construct_modality_config_and_transforms(num_frames, embodiment, downscaled_
             "action.cond_electroSurgeryMode_left",
             "action.cond_electroSurgeryMode_right",
         ]
-        
+
         # Thumbstick, clutch button, and state conditioning keys (ABSOLUTE values, pass-through)
         # These are NOT converted to deltas - they pass through as raw absolute values.
         # - Thumbstick: endoscope/instrument control (continuous)
@@ -1005,22 +1273,24 @@ def construct_modality_config_and_transforms(num_frames, embodiment, downscaled_
             "action.cond_electroSurgeryMode_left",
             "action.cond_electroSurgeryMode_right",
         ]
-        
+
         # Keys that don't need normalization (engagement status, scaling factors, pass-through)
         cmr_state_passthrough_keys = [
-            "state.hapticengaged_left", "state.hapticengaged_right",
-            "state.translation_scaling", "state.rotation_scaling",
+            "state.hapticengaged_left",
+            "state.hapticengaged_right",
+            "state.translation_scaling",
+            "state.rotation_scaling",
         ]
         cmr_action_passthrough_keys = ["action.hapticengaged_left", "action.hapticengaged_right"]
-        
+
         # State keys to include in final output (excluding pass-through only keys)
         cmr_state_output_keys = [k for k in state_modality.modality_keys if k not in cmr_state_passthrough_keys]
-        
+
         # NOTE: Normalization uses stats_cosmos.json (not stats.json) for CMR Versius.
         # Run scripts/compute_cmr_action_stats.py to generate stats_cosmos.json with
         # correct statistics for the 9D hybrid-relative pose format.
         # Stats loading is handled in dataset.py which checks for stats_cosmos.json first.
-        
+
         train_transform = ComposedModalityTransform(
             transforms=[
                 VideoToTensor(apply_to=video_modality.modality_keys),
@@ -1210,4 +1480,3 @@ def construct_modality_config_and_transforms(num_frames, embodiment, downscaled_
         )
 
     return config, train_transform, test_transform
-

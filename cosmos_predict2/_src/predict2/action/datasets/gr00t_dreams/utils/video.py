@@ -124,7 +124,9 @@ def get_frames_by_timestamps(
         reader = None
 
         if len(loaded_frames) == 0:
-            raise ValueError(f"No frames loaded from {video_path} for timestamps {timestamps[0]:.3f} to {timestamps[-1]:.3f}")
+            raise ValueError(
+                f"No frames loaded from {video_path} for timestamps {timestamps[0]:.3f} to {timestamps[-1]:.3f}"
+            )
 
         # Match requested timestamps to closest loaded frames (like decord/opencv backends do)
         loaded_ts = np.array(loaded_ts).reshape(-1, 1)  # (num_loaded, 1)

@@ -165,10 +165,12 @@ bridge_13frame_480_640_val_dataloader = L(DataLoader)(
 from cosmos_predict2._src.predict2.action.datasets.gr00t_dreams.data.dataset import LeRobotDataset
 
 # Default path for CMR Versius dataset - can be overridden in experiment configs
-base_path_cmr_versius = ("/CMR_Versius/cholecystectomy_480p,"
-                         "/CMR_Versius/hysterectomy_480p,"
-                         "/CMR_Versius/inguinal_hernia_480p,"
-                         "/CMR_Versius/prostatectomy_480p")
+base_path_cmr_versius = (
+    "/CMR_Versius/cholecystectomy_480p,"
+    "/CMR_Versius/hysterectomy_480p,"
+    "/CMR_Versius/inguinal_hernia_480p,"
+    "/CMR_Versius/prostatectomy_480p"
+)
 
 cmr_versius_train_dataset = L(LeRobotDataset)(
     num_frames=13,  # 12 prediction frames + 1 reference frame
@@ -274,8 +276,8 @@ cmr_versius_256_val_dataloader = L(DataLoader)(
 # ============================================================================
 from cosmos_predict2._src.predict2.action.datasets.gr00t_dreams.data.dataset import MixedLeRobotDataset
 from cosmos_predict2._src.predict2.action.datasets.gr00t_dreams.groot_configs import (
-    OPEN_H_DATASET_SPECS,
     MAX_ACTION_DIM,
+    OPEN_H_DATASET_SPECS,
 )
 
 open_h_multi_train_dataset = L(MixedLeRobotDataset)(
@@ -320,7 +322,11 @@ open_h_multi_val_dataloader = L(DataLoader)(
 from cosmos_predict2._src.predict2.action.datasets.gr00t_dreams.data.embodiment_tags import EmbodimentTag
 
 SUTUREBOT_DATASET_SPECS: list[dict] = [
-    {"path": os.environ.get("SUTUREBOT_DATASET_PATH", "/SutureBot"), "embodiment": EmbodimentTag.SUTUREBOT, "mix_ratio": 1.0},
+    {
+        "path": os.environ.get("SUTUREBOT_DATASET_PATH", "/SutureBot"),
+        "embodiment": EmbodimentTag.SUTUREBOT,
+        "mix_ratio": 1.0,
+    },
 ]
 
 suturebot_train_dataset = L(MixedLeRobotDataset)(

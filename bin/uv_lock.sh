@@ -13,6 +13,20 @@
 
 set -euo pipefail
 
+ensure_uv() {
+  if command -v uv &>/dev/null; then
+    return 0
+  fi
+  echo "uv not found; installing uv..." >&2
+  curl -LsSf https://astral.sh/uv/install.sh | sh
+  export PATH="${HOME}/.local/bin:${PATH}"
+  if ! command -v uv &>/dev/null; then
+    echo "Failed to install uv. Install manually: https://docs.astral.sh/uv/getting-started/installation/" >&2
+    return 1
+  fi
+}
+ensure_uv
+
 for file in "$@"; do
   project_dir="$(dirname "$file")"
   if ! uv lock --check --project "$project_dir" &>/dev/null; then

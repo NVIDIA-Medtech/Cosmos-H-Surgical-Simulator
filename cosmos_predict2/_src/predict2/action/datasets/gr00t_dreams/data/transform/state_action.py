@@ -18,11 +18,11 @@ import random
 from typing import Any, ClassVar
 
 import numpy as np
-from scipy.spatial.transform import Rotation
 
 # import pytorch3d.transforms as pt
 import torch
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator, model_validator
+from scipy.spatial.transform import Rotation
 
 from cosmos_predict2._src.predict2.action.datasets.gr00t_dreams.data.schema import (
     DatasetMetadata,
@@ -33,7 +33,6 @@ from cosmos_predict2._src.predict2.action.datasets.gr00t_dreams.data.transform.b
     InvertibleModalityTransform,
     ModalityTransform,
 )
-
 
 # =============================================================================
 # Rotation helper functions for CMR Versius
@@ -870,15 +869,15 @@ def convert_to_hybrid_relative_with_engagement(
 ) -> np.ndarray:
     """
     Compute hybrid-relative actions with engagement-aware delta re-integration.
-    
+
     Instead of computing: action[t] = pose[t] - pose[ref]
     This function computes: action[t] = sum(delta[i] * engaged[i] for i in ref+1..t)
-    
+
     This correctly handles clutch scenarios in CMR Versius surgical robot data:
     - Reference disengaged → later engaged (no phantom jump from repositioning)
     - Mid-horizon clutch events (disengaged deltas zeroed)
     - Repositioning during clutch-out (not counted as arm motion)
-    
+
     Args:
         action_data: Absolute action data of shape (T, D) where D = 3 (xyz) + 6 (rot6d) = 9
         eef_pose: Reference end-effector pose of shape (9,) for rot6d format: xyz + rot6d
@@ -886,13 +885,13 @@ def convert_to_hybrid_relative_with_engagement(
         input_rotation_format: Format of rotation in action_data ("rot6d" or "quat")
         reference_rotation_format: Format of rotation in eef_pose ("rot6d" or "quat")
         ref_engaged: Whether the reference frame (t=0 state) is engaged
-    
+
     Returns:
         Hybrid-relative actions of shape (T, 9) with xyz (relative) + rot6d (relative)
     """
     T = action_data.shape[0]
     result = np.zeros((T, 9), dtype=np.float32)
-    
+
     # Parse reference pose
     ref_xyz = eef_pose[:3]
     if reference_rotation_format == "quat":
@@ -901,7 +900,7 @@ def convert_to_hybrid_relative_with_engagement(
         ref_R = rot6d_to_rotation_matrix(eef_pose[3:9])
     else:
         raise ValueError(f"Unknown reference_rotation_format: {reference_rotation_format}")
-    
+
     # Batch convert all action rotations to matrices
     if input_rotation_format == "quat":
         action_Rs = quats_to_rotation_matrices(action_data[:, 3:7], order="xyzw")
@@ -909,77 +908,73 @@ def convert_to_hybrid_relative_with_engagement(
         action_Rs = rot6ds_to_rotation_matrices(action_data[:, 3:9])
     else:
         raise ValueError(f"Unknown input_rotation_format: {input_rotation_format}")
-    
+
     # Build validity mask
     engaged_bool = engaged.astype(bool)
     prev_engaged = np.concatenate([[ref_engaged], engaged_bool[:-1]])
     delta_valid = prev_engaged & engaged_bool
-    
+
     # Compute translation deltas and cumulative sum
     action_xyz = action_data[:, :3]
     all_xyz = np.vstack([ref_xyz[np.newaxis, :], action_xyz])
     delta_xyz = np.diff(all_xyz, axis=0)
     masked_delta_xyz = delta_xyz * delta_valid[:, np.newaxis]
     result[:, :3] = np.cumsum(masked_delta_xyz, axis=0)
-    
+
     # Compute rotation deltas
     prev_Rs = np.concatenate([ref_R[np.newaxis, :, :], action_Rs[:-1]], axis=0)
-    delta_Rs = np.einsum('tji,tjk->tik', prev_Rs, action_Rs)
-    
+    delta_Rs = np.einsum("tji,tjk->tik", prev_Rs, action_Rs)
+
     # For invalid deltas, set delta_R to identity
     identity = np.eye(3, dtype=np.float32)
     delta_Rs = np.where(delta_valid[:, np.newaxis, np.newaxis], delta_Rs, identity)
-    
+
     # Cumulative rotation product
     cumulative_R = np.eye(3, dtype=np.float32)
     cumulative_Rs = np.zeros((T, 3, 3), dtype=np.float32)
     for t in range(T):
         cumulative_R = cumulative_R @ delta_Rs[t]
         cumulative_Rs[t] = cumulative_R
-    
+
     # Convert cumulative rotations to rot6d
     result[:, 3:9] = rotation_matrices_to_rot6d(cumulative_Rs)
-    
+
     return result
 
 
 def scale_rot6d_by_angle(rot6d: np.ndarray, scale_factor: float) -> np.ndarray:
     """
     Scale a rot6d representation by scaling its axis-angle magnitude.
-    
+
     Args:
         rot6d: 6D rotation representation of shape (6,) or (N, 6)
         scale_factor: Factor to multiply the rotation angle by
-    
+
     Returns:
         Scaled rot6d representation with same shape as input
     """
     from scipy.spatial.transform import Rotation
-    
+
     single_input = rot6d.ndim == 1
     if single_input:
         rot6d = rot6d[np.newaxis, :]
-    
+
     rot_matrices = rot6ds_to_rotation_matrices(rot6d)
     rotations = Rotation.from_matrix(rot_matrices)
     rotvecs = rotations.as_rotvec()
-    
+
     angle_magnitudes = np.linalg.norm(rotvecs, axis=-1, keepdims=True)
     epsilon = 1e-8
-    
-    scaled_rotvecs = np.where(
-        angle_magnitudes > epsilon,
-        rotvecs * scale_factor,
-        rotvecs
-    )
-    
+
+    scaled_rotvecs = np.where(angle_magnitudes > epsilon, rotvecs * scale_factor, rotvecs)
+
     scaled_rotations = Rotation.from_rotvec(scaled_rotvecs)
     scaled_matrices = scaled_rotations.as_matrix()
     scaled_rot6d = rotation_matrices_to_rot6d(scaled_matrices)
-    
+
     if single_input:
         scaled_rot6d = scaled_rot6d[0]
-    
+
     return scaled_rot6d
 
 
@@ -990,15 +985,15 @@ def apply_motion_scaling_to_hybrid_relative(
 ) -> np.ndarray:
     """
     Apply motion scaling normalization to hybrid-relative actions.
-    
+
     This converts from "hand-controller-space" to "instrument-space" by
     multiplying by the scaling factors.
-    
+
     Args:
         hybrid_rel_data: Hybrid-relative actions of shape (H, 9) - xyz_rel + rot6d_rel
         translation_scaling: Translation scaling factor (e.g., 0.333, 0.5, 1.0)
         rotation_scaling: Rotation scaling factor (e.g., 1.0, 1.5, 2.0)
-    
+
     Returns:
         Motion-scaled hybrid-relative actions of shape (H, 9) in instrument-space
     """
@@ -1016,9 +1011,9 @@ ROT6D_IDENTITY = np.array([1, 0, 0, 0, 1, 0], dtype=np.float32)
 class CMRVersiusRelativeActionTransform(ModalityTransform):
     """
     Transform for converting CMR Versius absolute actions to hybrid-relative representation.
-    
+
     This transform handles the complex conditioning space of the CMR Versius surgical robot:
-    
+
     ACTIONS (30D):
     - Left arm: xyz (3) + rot6d (6) + gripper (1) = 10D
     - Right arm: xyz (3) + rot6d (6) + gripper (1) = 10D
@@ -1027,16 +1022,16 @@ class CMRVersiusRelativeActionTransform(ModalityTransform):
     - Thumbstick Y: left (1) + right (1) = 2D (endoscope/instrument control)
     - Thumbstick Button: left (1) + right (1) = 2D (instrument straighten function)
     - Clutch Button: left (1) + right (1) = 2D (engage/disengage arm control)
-    
+
     STATE CONDITIONING (14D, sampled at action timesteps):
     - Haptic engaged: left (1) + right (1) = 2D (persistent engagement state)
     - Arm linked to haptic: left (1) + right (1) = 2D (which arm 0-3 is active)
     - Arm instrument type: arm_0 (1) + arm_1 (1) + arm_2 (1) + arm_3 (1) = 4D
     - Arm HUD color: arm_0 (1) + arm_1 (1) + arm_2 (1) + arm_3 (1) = 4D
     - Electrosurgery mode: left (1) + right (1) = 2D (CUT/COAG selection)
-    
+
     - Total: 44D conditioning space (30D actions + 14D state)
-    
+
     The transform performs:
     1. Hybrid-relative conversion for poses (DELTA: translation relative to current EEF,
        rotation relative to initial orientation)
@@ -1044,11 +1039,11 @@ class CMRVersiusRelativeActionTransform(ModalityTransform):
     3. Zeroing of energy buttons during clutch-out for safety (ABSOLUTE with zeroing logic)
     4. Pass-through for thumbstick, clutch button, and state conditioning (ABSOLUTE: no transformation)
     5. Optional motion scaling to convert hand-controller-space to instrument-space
-    
+
     Note: Only pose keys are converted to deltas. All other values remain as ABSOLUTE:
     - Gripper/energy: have clutch-aware logic (sample-and-hold / zeroing)
     - Thumbstick, clutch button, state conditioning: pure pass-through
-    
+
     Args:
         apply_to: List of action keys to transform
         pose_keys: Dict mapping pose key names to their state reference keys
@@ -1062,57 +1057,29 @@ class CMRVersiusRelativeActionTransform(ModalityTransform):
         input_rotation_format: Format of rotation in action data ("rot6d" or "quat")
         reference_rotation_format: Format of rotation in state reference ("rot6d" or "quat")
     """
-    
+
     apply_to: list[str] = Field(..., description="The action keys to transform")
-    pose_keys: dict[str, str] = Field(
-        default_factory=dict,
-        description="Dict mapping pose key -> state reference key"
-    )
-    gripper_keys: list[str] = Field(
-        default_factory=list,
-        description="Gripper keys (sample-and-hold during clutch)"
-    )
-    energy_keys: list[str] = Field(
-        default_factory=list,
-        description="Energy button keys (zeroed during clutch)"
-    )
+    pose_keys: dict[str, str] = Field(default_factory=dict, description="Dict mapping pose key -> state reference key")
+    gripper_keys: list[str] = Field(default_factory=list, description="Gripper keys (sample-and-hold during clutch)")
+    energy_keys: list[str] = Field(default_factory=list, description="Energy button keys (zeroed during clutch)")
     thumbstick_keys: list[str] = Field(
         default_factory=list,
-        description="Thumbstick, clutch button, and state conditioning keys (absolute values, pass-through without any transformation)"
+        description="Thumbstick, clutch button, and state conditioning keys (absolute values, pass-through without any transformation)",
     )
-    engaged_left_key: str = Field(
-        default="state.hapticengaged_left",
-        description="Key for left arm engagement"
-    )
-    engaged_right_key: str = Field(
-        default="state.hapticengaged_right",
-        description="Key for right arm engagement"
-    )
-    translation_scaling_key: str | None = Field(
-        default=None,
-        description="Key for translation scaling factor"
-    )
-    rotation_scaling_key: str | None = Field(
-        default=None,
-        description="Key for rotation scaling factor"
-    )
-    input_rotation_format: str = Field(
-        default="rot6d",
-        description="Rotation format in action data"
-    )
-    reference_rotation_format: str = Field(
-        default="rot6d",
-        description="Rotation format in state reference"
-    )
+    engaged_left_key: str = Field(default="state.hapticengaged_left", description="Key for left arm engagement")
+    engaged_right_key: str = Field(default="state.hapticengaged_right", description="Key for right arm engagement")
+    translation_scaling_key: str | None = Field(default=None, description="Key for translation scaling factor")
+    rotation_scaling_key: str | None = Field(default=None, description="Key for rotation scaling factor")
+    input_rotation_format: str = Field(default="rot6d", description="Rotation format in action data")
+    reference_rotation_format: str = Field(default="rot6d", description="Rotation format in state reference")
     action_passthrough_keys: list[str] = Field(
         default_factory=list,
-        description="Action keys to remove after processing (e.g. engagement status used for clutch logic)"
+        description="Action keys to remove after processing (e.g. engagement status used for clutch logic)",
     )
     state_passthrough_keys: list[str] = Field(
-        default_factory=list,
-        description="State keys to remove after processing (e.g. scaling factors)"
+        default_factory=list, description="State keys to remove after processing (e.g. scaling factors)"
     )
-    
+
     def _get_arm_from_key(self, key: str) -> str | None:
         """Determine which arm a key belongs to."""
         if "left" in key.lower():
@@ -1120,7 +1087,7 @@ class CMRVersiusRelativeActionTransform(ModalityTransform):
         elif "right" in key.lower():
             return "right"
         return None
-    
+
     def apply(self, data: dict[str, Any]) -> dict[str, Any]:
         """Apply hybrid-relative conversion with engagement-aware processing."""
         # Get engagement data
@@ -1128,7 +1095,7 @@ class CMRVersiusRelativeActionTransform(ModalityTransform):
         engaged_right = None
         ref_engaged_left = True
         ref_engaged_right = True
-        
+
         if self.engaged_left_key in data:
             engaged_val = data[self.engaged_left_key]
             if isinstance(engaged_val, torch.Tensor):
@@ -1136,14 +1103,14 @@ class CMRVersiusRelativeActionTransform(ModalityTransform):
             engaged_left = engaged_val.flatten().astype(bool)
             # Reference engagement from first timestep of state (delta_indices=[0])
             ref_engaged_left = bool(engaged_val.flatten()[0])
-        
+
         if self.engaged_right_key in data:
             engaged_val = data[self.engaged_right_key]
             if isinstance(engaged_val, torch.Tensor):
                 engaged_val = engaged_val.numpy()
             engaged_right = engaged_val.flatten().astype(bool)
             ref_engaged_right = bool(engaged_val.flatten()[0])
-        
+
         # Get motion scaling factors if configured
         trans_scale = 1.0
         rot_scale = 1.0
@@ -1157,32 +1124,32 @@ class CMRVersiusRelativeActionTransform(ModalityTransform):
             if isinstance(scale_val, torch.Tensor):
                 scale_val = scale_val.numpy()
             rot_scale = float(scale_val.flatten()[0])
-        
+
         # Process each key
         for key in self.apply_to:
             if key not in data:
                 continue
-            
+
             action = data[key]
             is_tensor = isinstance(action, torch.Tensor)
             action_np = action.numpy() if is_tensor else action
             original_dtype = action.dtype if is_tensor else action.dtype
-            
+
             arm = self._get_arm_from_key(key)
             engaged = engaged_left if arm == "left" else engaged_right if arm == "right" else None
             ref_engaged = ref_engaged_left if arm == "left" else ref_engaged_right if arm == "right" else True
-            
+
             # Handle pose keys - convert to hybrid-relative
             if key in self.pose_keys:
                 state_key = self.pose_keys[key]
                 if state_key not in data:
                     raise KeyError(f"State reference key '{state_key}' not found for pose key '{key}'")
-                
+
                 eef_pose = data[state_key]
                 if isinstance(eef_pose, torch.Tensor):
                     eef_pose = eef_pose.numpy()
                 eef_pose = eef_pose.flatten()  # Flatten to 1D
-                
+
                 if engaged is not None:
                     action_np = convert_to_hybrid_relative_with_engagement(
                         action_data=action_np,
@@ -1192,13 +1159,11 @@ class CMRVersiusRelativeActionTransform(ModalityTransform):
                         reference_rotation_format=self.reference_rotation_format,
                         ref_engaged=ref_engaged,
                     )
-                
+
                 # Apply motion scaling
                 if trans_scale != 1.0 or rot_scale != 1.0:
-                    action_np = apply_motion_scaling_to_hybrid_relative(
-                        action_np, trans_scale, rot_scale
-                    )
-            
+                    action_np = apply_motion_scaling_to_hybrid_relative(action_np, trans_scale, rot_scale)
+
             # Handle gripper keys - sample-and-hold during clutch
             elif key in self.gripper_keys:
                 if engaged is not None:
@@ -1206,7 +1171,7 @@ class CMRVersiusRelativeActionTransform(ModalityTransform):
                     for t in range(T):
                         if not engaged[t] and t > 0:
                             action_np[t] = action_np[t - 1]
-            
+
             # Handle energy keys - zero during clutch for safety
             elif key in self.energy_keys:
                 if engaged is not None:
@@ -1214,7 +1179,7 @@ class CMRVersiusRelativeActionTransform(ModalityTransform):
                     for t in range(T):
                         if not engaged[t]:
                             action_np[t] = 0.0
-            
+
             # Handle thumbstick, clutch button, and state conditioning keys - pass through without modification
             # These are ABSOLUTE values (not deltas like pose):
             # - Thumbsticks: control endoscope and instrument straighten function
@@ -1223,19 +1188,19 @@ class CMRVersiusRelativeActionTransform(ModalityTransform):
             # All may be active independently of arm engagement status
             elif key in self.thumbstick_keys:
                 pass  # No modification needed, absolute values pass through
-            
+
             # Convert back to tensor if needed
             if is_tensor:
                 data[key] = torch.from_numpy(action_np).to(original_dtype)
             else:
                 data[key] = action_np
-        
+
         # Remove passthrough keys that were only needed for processing
         for key in self.action_passthrough_keys:
             data.pop(key, None)
         for key in self.state_passthrough_keys:
             data.pop(key, None)
-        
+
         return data
 
 
@@ -1370,14 +1335,9 @@ class GenericRelativeActionTransform(ModalityTransform):
             # ----------------------------------------------------------
             if cfg.rep == "rel_xyz_rot6d":
                 if cfg.state_key is None:
-                    raise ValueError(
-                        f"state_key is required for rel_xyz_rot6d action key '{key}'"
-                    )
+                    raise ValueError(f"state_key is required for rel_xyz_rot6d action key '{key}'")
                 if cfg.state_key not in data:
-                    raise KeyError(
-                        f"Reference state key '{cfg.state_key}' not found for "
-                        f"action key '{key}'"
-                    )
+                    raise KeyError(f"Reference state key '{cfg.state_key}' not found for action key '{key}'")
 
                 eef_pose_raw = data[cfg.state_key]
                 if isinstance(eef_pose_raw, torch.Tensor):
@@ -1402,14 +1362,9 @@ class GenericRelativeActionTransform(ModalityTransform):
             # ----------------------------------------------------------
             elif cfg.rep == "relative":
                 if cfg.state_key is None:
-                    raise ValueError(
-                        f"state_key is required for relative action key '{key}'"
-                    )
+                    raise ValueError(f"state_key is required for relative action key '{key}'")
                 if cfg.state_key not in data:
-                    raise KeyError(
-                        f"Reference state key '{cfg.state_key}' not found for "
-                        f"action key '{key}'"
-                    )
+                    raise KeyError(f"Reference state key '{cfg.state_key}' not found for action key '{key}'")
 
                 ref_state = data[cfg.state_key]
                 if isinstance(ref_state, torch.Tensor):
