@@ -1,4 +1,19 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """Print per-dataset episode lists for the 5% test split of the Open-H mixture.
 
 For each sub-dataset in OPEN_H_DATASET_SPECS, this script constructs the test
@@ -28,17 +43,16 @@ import sys
 from collections import OrderedDict
 from pathlib import Path
 
-from cosmos_predict2._src.predict2.action.datasets.gr00t_dreams.groot_configs import (
-    OPEN_H_DATASET_SPECS,
-    construct_modality_config_and_transforms,
-)
 from cosmos_predict2._src.predict2.action.datasets.gr00t_dreams.data.dataset import (
     WrappedLeRobotSingleDataset,
 )
 from cosmos_predict2._src.predict2.action.datasets.gr00t_dreams.data.embodiment_tags import (
     EmbodimentTag,
 )
-
+from cosmos_predict2._src.predict2.action.datasets.gr00t_dreams.groot_configs import (
+    OPEN_H_DATASET_SPECS,
+    construct_modality_config_and_transforms,
+)
 
 NUM_FRAMES = 13  # 1 context + 12 prediction (must match training config)
 
@@ -61,7 +75,9 @@ def get_test_episodes(spec: dict) -> dict:
     exclude_splits = spec.get("exclude_splits", None)
 
     config, _, test_transform = construct_modality_config_and_transforms(
-        num_frames=NUM_FRAMES, embodiment=embodiment, downscaled_res=False,
+        num_frames=NUM_FRAMES,
+        embodiment=embodiment,
+        downscaled_res=False,
     )
 
     modality_filename = None
@@ -94,11 +110,12 @@ def get_test_episodes(spec: dict) -> dict:
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Print test-split episode lists for all Open-H datasets."
-    )
+    parser = argparse.ArgumentParser(description="Print test-split episode lists for all Open-H datasets.")
     parser.add_argument(
-        "--output", "-o", type=str, default=None,
+        "--output",
+        "-o",
+        type=str,
+        default=None,
         help="Path to write JSON output. If omitted, prints to stdout only.",
     )
     args = parser.parse_args()
@@ -145,9 +162,7 @@ def main():
         print(f"  episodes: {ep_str}")
 
     print("-" * 90)
-    print(
-        f"{'TOTAL':<40} {'':<22} {total_test_steps:>12,} {total_test_episodes:>14,}"
-    )
+    print(f"{'TOTAL':<40} {'':<22} {total_test_steps:>12,} {total_test_episodes:>14,}")
     print("=" * 90)
 
     # Write JSON output

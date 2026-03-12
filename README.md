@@ -183,7 +183,7 @@ CUDA_VISIBLE_DEVICES=0 PYTHONPATH=. python cosmos_predict2/_src/predict2/action/
   --experiment cosmos_predict2p5_2B_action_conditioned_cmr_13frame_44D_8nodes_release_oss \
   --ckpt_path /path/to/model_ema_bf16.pt \
   --dataset_path /CMR_Versius/cholecystectomy_480p \
-  --save_root results/cmr_eval/cholecystectomy \  
+  --save_root results/cmr_eval/cholecystectomy \
   --data_split test \
   --episode_ids 0,1,2
 ```
