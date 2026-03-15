@@ -14,7 +14,7 @@ Action-conditioned world simulation for surgical robotics, built on NVIDIA Cosmo
 
 ## Overview
 
-Cosmos-H-Surgical-Simulator is a surgical-domain variant of [Cosmos Predict2.5](https://github.com/nvidia-cosmos/cosmos-predict2.5) that generates future video frames conditioned on robot actions and an initial surgical scene. Given a context frame from a surgical procedure and a sequence of action vectors describing instrument kinematics, the model predicts realistic video of the resulting surgical environment — enabling applications in surgical simulation, pre-operative planning, and robotic training.
+Cosmos-H-Surgical-Simulator is a surgical-domain variant of [Cosmos Predict2.5](https://github.com/nvidia-cosmos/cosmos-predict2.5) that generates future video frames conditioned on robot actions and an initial surgical scene. Given a context frame from a surgical procedure and a sequence of action vectors describing instrument kinematics, the model predicts realistic video of the resulting surgical environment — enabling applications in surgical simulation, pre-operative planning, and robotic training. For video prediction and control-conditioned transfer without action conditioning, see the companion repo [Cosmos-H-Surgical](https://github.com/NVIDIA-Medtech/Cosmos-H-Surgical).
 
 The model supports **9 distinct robot embodiments** across **10+ institutions**, with all embodiment action spaces mapped into a unified 44-dimensional action vector. The CMR Versius system serves as the primary embodiment. See [README_ACTION_SPACE.md](scripts/README_ACTION_SPACE.md) for the full action space design.
 
@@ -143,7 +143,7 @@ This project downloads and installs additional third-party open source software.
 - [Cosmos Predict2.5 Paper](https://arxiv.org/abs/2511.00062) — Base model paper
 - [Open-H Dataset](https://huggingface.co/datasets/nvidia/Open-H) — Multi-embodiment surgical benchmark
 - [HuggingFace](https://huggingface.co/nvidia/Cosmos-H-Surgical-Simulator) — Model weights and checkpoints
-- [Cosmos-H-Surgical](https://github.com/nvidia-cosmos/Cosmos-H-Surgical) — Sister repo (predict + transfer)
+- [Cosmos-H-Surgical](https://github.com/NVIDIA-Medtech/Cosmos-H-Surgical) — Sister repo (predict + transfer)
 - [Cosmos Predict2.5](https://github.com/nvidia-cosmos/cosmos-predict2.5) — Upstream base model
 - [NVIDIA Cosmos Platform](https://www.nvidia.com/en-us/ai/cosmos) — Product website
 
