@@ -9,7 +9,7 @@ The goal of distillation is distill a pre-trained video diffusion model (the tea
 During distillation training, an auxiliary critic network (often referred to as the "fake score net" in the literature and code) is trained alongside the student. The training process alternates between updating the student and critic networks.
 
 
-> **Note:** This README covers code walk through and post-training distillation instructions (distilled post-training checkpoint). For detailed inference instructions using the distilled base model, please see `cosmos-predict2.5/docs/inference.md`.
+> **Note:** This README covers code walk through and post-training distillation instructions (distilled post-training checkpoint). For detailed inference instructions using the distilled base model, please see [docs/inference.md](inference.md).
 
 
 ### Key Differences from Standard Cosmos Training

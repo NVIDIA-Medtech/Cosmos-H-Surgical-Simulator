@@ -23,7 +23,7 @@ dynamic = ["version"]
 authors = [
   {name = "NVIDIA Corporation"},
 ]
-description = "Cosmos Predict2 World Foundation Model"
+description = "Cosmos-H-Surgical-Simulator: Action-conditioned world simulation for surgical robotics"
 requires-python = ">=3.10"
 license = {text = "Apache-2.0"}
 classifiers = [
@@ -50,16 +50,16 @@ dev = ["cosmos-oss[dev,gradio]"]
 [project.readme]
 content-type = "text/markdown"
 text = '''
-# Cosmos-Predict2
+# Cosmos-H-Surgical-Simulator
 
-[Documentation](https://github.com/nvidia-cosmos/cosmos-predict2/blob/main/README.md)
+[Documentation](https://github.com/nvidia-cosmos/Cosmos-H-Surgical-Simulator/blob/main/README.md)
 '''
 
 [project.urls]
-documentation = "https://github.com/nvidia-cosmos/cosmos-predict2/blob/main/README.md"
-homepage = "https://research.nvidia.com/labs/dir/cosmos-predict2"
-issues = "https://github.com/nvidia-cosmos/cosmos-predict2/issues"
-repository = "https://github.com/nvidia-cosmos/cosmos-predict2"
+documentation = "https://github.com/nvidia-cosmos/Cosmos-H-Surgical-Simulator/blob/main/README.md"
+homepage = "https://github.com/nvidia-cosmos/Cosmos-H-Surgical-Simulator"
+issues = "https://github.com/nvidia-cosmos/Cosmos-H-Surgical-Simulator/issues"
+repository = "https://github.com/nvidia-cosmos/Cosmos-H-Surgical-Simulator"
 
 [tool.uv]
 conflicts = [
