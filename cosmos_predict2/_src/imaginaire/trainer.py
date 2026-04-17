@@ -40,6 +40,7 @@ from cosmos_predict2._src.imaginaire.model import ImaginaireModel
 from cosmos_predict2._src.imaginaire.utils import callback, distributed, ema, log, misc
 from cosmos_predict2._src.imaginaire.utils.checkpointer import Checkpointer
 from cosmos_predict2._src.imaginaire.utils.misc import StragglerDetectorV2
+from cosmos_predict2._src.predict2.utils.dtensor_helper import broadcast_dtensor_model_states
 
 
 class ImaginaireTrainer:
@@ -170,6 +171,12 @@ class ImaginaireTrainer:
         self.callbacks.on_optimizer_init_end()
         # Load the model checkpoint and get the starting iteration number.
         iteration = self.checkpointer.load(model, optimizer, scheduler, grad_scaler)
+
+        # Fix: re-initialize action embedder MLPs that were zeroed out by FSDP
+        # meta-device materialization when loading from a base checkpoint that
+        # lacks action_embedder keys.
+        self._reinitialize_action_embedders_if_needed(model, iteration)
+
         grad_accum_iter = 0
         log.critical(f"Distributed parallelism mode: {self.config.trainer.distributed_parallelism}")
         if self.config.trainer.distributed_parallelism == "ddp":
@@ -261,6 +268,87 @@ class ImaginaireTrainer:
         self.checkpointer.finalize()
         distributed.barrier()
         self.callbacks.on_app_end()
+
+    @staticmethod
+    def _reinitialize_action_embedders_if_needed(model, iteration: int) -> None:
+        """Re-initialize action embedder MLPs if they are all-zero after checkpoint loading.
+
+        Handles three scenarios:
+        1. Fresh fine-tuning from base Cosmos checkpoint (iteration == 0,
+           weights all-zero) — reinitializes.
+        2. Resuming from a **broken** prior fine-tuning whose MLPs are still
+           all-zero (iteration > 0, weights all-zero) — reinitializes and
+           logs a recovery notice.
+        3. Resuming from a healthy fine-tuning with trained action embedders
+           (weights nonzero) — skips.
+
+        After reinit, copies the updated weights into ``model.net_ema`` using
+        the existing EMA updater and synchronizes both modules across ranks.
+        """
+        net = getattr(model, "net", None)
+        if net is None or not hasattr(net, "reinitialize_action_embedders"):
+            return
+
+        action_weight_params = [
+            (name, p)
+            for name, p in net.named_parameters()
+            if "action_embedder" in name
+            and name.endswith(".weight")
+            and (p.data.to_local() if hasattr(p.data, "to_local") else p.data).device.type != "meta"
+        ]
+        if not action_weight_params:
+            log.info("[ACTION-EMB-FIX] Skipped: no materialized action_embedder weight matrices found on model.net.")
+            return
+
+        all_zero = all(
+            (p.data.to_local() if hasattr(p.data, "to_local") else p.data).abs().max().item() == 0.0
+            for _, p in action_weight_params
+        )
+
+        if not all_zero:
+            log.info("[ACTION-EMB-FIX] Skipped: checkpoint already contains nonzero action embedder weights.")
+            return
+
+        if iteration == 0:
+            log.info(
+                "[ACTION-EMB-FIX] Fresh fine-tune from base checkpoint: "
+                "all action_embedder weights are zero at iteration 0, reinitializing (Kaiming uniform)."
+            )
+        else:
+            log.warning(
+                f"[ACTION-EMB-FIX] Recovery: all action_embedder weights are zero at iteration {iteration}; "
+                f"reinitializing (prior run was affected by the dead-MLP initialization bug)."
+            )
+
+        def _mirror_to_ema() -> None:
+            if not (hasattr(model, "net_ema") and model.net_ema is not None):
+                return
+            if hasattr(model, "net_ema_worker") and model.net_ema_worker is not None:
+                model.net_ema_worker.copy_to(src_model=model.net, tgt_model=model.net_ema)
+            else:
+                for tgt_param, src_param in zip(model.net_ema.parameters(), model.net.parameters(), strict=False):
+                    tgt_param.data.copy_(src_param.data)
+
+        fsdp_device_mesh = getattr(model, "fsdp_device_mesh", None)
+        if fsdp_device_mesh is not None:
+            # Under FSDP/DTensor, each rank reinitializes its own local shard,
+            # then broadcast_dtensor_model_states syncs replicated shards.
+            net.reinitialize_action_embedders()
+            _mirror_to_ema()
+            broadcast_dtensor_model_states(model.net, fsdp_device_mesh)
+            if hasattr(model, "net_ema") and model.net_ema is not None:
+                broadcast_dtensor_model_states(model.net_ema, fsdp_device_mesh)
+            log.info(
+                "[ACTION-EMB-FIX] Synchronized reinitialized weights (net + net_ema) across ranks via DTensor broadcast."
+            )
+        else:
+            if distributed.is_rank0():
+                net.reinitialize_action_embedders()
+                _mirror_to_ema()
+            distributed.sync_model_states(model.net, src=0)
+            if hasattr(model, "net_ema") and model.net_ema is not None:
+                distributed.sync_model_states(model.net_ema, src=0)
+            log.info("[ACTION-EMB-FIX] Synchronized reinitialized weights (net + net_ema) from rank 0.")
 
     def training_step(
         self,
