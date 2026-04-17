@@ -22,6 +22,7 @@ The underlying architecture is a flow-based diffusion transformer that unifies T
 
 ## News
 
+- **[April 2026]** — Bugfix: properly initialize action embedder MLPs (`action_embedder_B_D` / `action_embedder_B_3D`) after loading the base checkpoint, so their weights are no longer left at zero under FSDP meta-device materialization.
 - **[March 2026]** — Released Cosmos-H-Surgical-Simulator for the [Open-H benchmark](#open-h-benchmark)
 
 For Cosmos-Predict2.5 updates, see the [upstream changelog](https://github.com/NVIDIA/Cosmos-Predict2.5).

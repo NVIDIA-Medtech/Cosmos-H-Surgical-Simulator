@@ -35,6 +35,29 @@ class Mlp(nn.Module):
         self.fc2 = nn.Linear(hidden_features, out_features)
         self.drop = nn.Dropout(drop)
 
+    def init_weights(self) -> None:
+        """Initialize weights using Kaiming uniform (the ``nn.Linear`` default).
+
+        This must be called explicitly after FSDP meta-device materialization
+        because the default ``nn.Linear`` Kaiming init runs on the meta device
+        where it has no effect.
+
+        Handles FSDP DTensor-wrapped parameters by writing directly to the
+        local tensor data, bypassing the DTensor dispatch layer which can
+        silently intercept in-place operations like ``reset_parameters()``.
+        """
+        import torch.nn.init as init
+
+        for linear in (self.fc1, self.fc2):
+            w = linear.weight
+            b = linear.bias
+            local_w = w.to_local() if hasattr(w, "to_local") else w.data
+            local_b = b.to_local() if hasattr(b, "to_local") else b.data
+            init.kaiming_uniform_(local_w, a=5 ** 0.5)
+            fan_in, _ = init._calculate_fan_in_and_fan_out(local_w)
+            bound = 1 / fan_in ** 0.5 if fan_in > 0 else 0
+            init.uniform_(local_b, -bound, bound)
+
     def forward(self, x):
         x = self.fc1(x)
         x = self.activation(x)
@@ -79,6 +102,29 @@ class ActionConditionedMinimalV1LVGDiT(MiniTrainDIT):
             act_layer=lambda: nn.GELU(approximate="tanh"),
             drop=0,
         )
+
+    def reinitialize_action_embedders(self) -> None:
+        """Re-initialize action embedder weights after FSDP checkpoint loading.
+
+        When fine-tuning from a pre-trained Cosmos base checkpoint that lacks
+        action_embedder keys, FSDP meta-device materialization leaves these
+        parameters as all-zeros (the normal ``nn.Linear`` Kaiming init runs on
+        the meta device where it has no effect).  This method reapplies
+        Kaiming uniform initialization directly on the local tensor data,
+        bypassing DTensor dispatch.
+        """
+        for name, mlp in [("action_embedder_B_D", self.action_embedder_B_D),
+                          ("action_embedder_B_3D", self.action_embedder_B_3D)]:
+            mlp.init_weights()
+            fc1_w = mlp.fc1.weight
+            fc2_w = mlp.fc2.weight
+            local_fc1 = fc1_w.to_local() if hasattr(fc1_w, "to_local") else fc1_w.data
+            local_fc2 = fc2_w.to_local() if hasattr(fc2_w, "to_local") else fc2_w.data
+            log.info(
+                f"[ACTION-EMB-FIX] Reinitialized {name}: "
+                f"fc1.weight local_norm={local_fc1.norm().item():.6f}, "
+                f"fc2.weight local_norm={local_fc2.norm().item():.6f}"
+            )
 
     def forward(
         self,
@@ -231,6 +277,29 @@ class ActionChunkConditionedMinimalV1LVGDiT(MiniTrainDIT):
             act_layer=lambda: nn.GELU(approximate="tanh"),
             drop=0,
         )
+
+    def reinitialize_action_embedders(self) -> None:
+        """Re-initialize action embedder weights after FSDP checkpoint loading.
+
+        When fine-tuning from a pre-trained Cosmos base checkpoint that lacks
+        action_embedder keys, FSDP meta-device materialization leaves these
+        parameters as all-zeros (the normal ``nn.Linear`` Kaiming init runs on
+        the meta device where it has no effect).  This method reapplies
+        Kaiming uniform initialization directly on the local tensor data,
+        bypassing DTensor dispatch.
+        """
+        for name, mlp in [("action_embedder_B_D", self.action_embedder_B_D),
+                          ("action_embedder_B_3D", self.action_embedder_B_3D)]:
+            mlp.init_weights()
+            fc1_w = mlp.fc1.weight
+            fc2_w = mlp.fc2.weight
+            local_fc1 = fc1_w.to_local() if hasattr(fc1_w, "to_local") else fc1_w.data
+            local_fc2 = fc2_w.to_local() if hasattr(fc2_w, "to_local") else fc2_w.data
+            log.info(
+                f"[ACTION-EMB-FIX] Reinitialized {name}: "
+                f"fc1.weight local_norm={local_fc1.norm().item():.6f}, "
+                f"fc2.weight local_norm={local_fc2.norm().item():.6f}"
+            )
 
     def forward(
         self,
