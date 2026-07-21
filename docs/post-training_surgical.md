@@ -69,6 +69,7 @@ This produces three files:
 
 ## See Also
 
+- [Teacher-to-Causal-Student Tutorial](tutorial_teacher_training_and_self_forcing.md) — custom-data fine-tuning, long-horizon teacher adaptation, Self Forcing, and Cosmos-H-Dreams deployment
 - [Surgical Inference Guide](inference_surgical.md) — running inference with trained checkpoints
 - [Action Space Design](../scripts/README_ACTION_SPACE.md) — understanding the 44D action vector
 - [Codebase Guide](codebase-guide.md) — key source files and data flow

@@ -111,6 +111,7 @@ For detailed inference options and multi-embodiment examples, see the [Surgical 
 | [Setup](docs/setup.md) | Full installation guide (uv, Docker, Blackwell) |
 | [Surgical Inference](docs/inference_surgical.md) | Multi-embodiment and CMR-only inference with Open-H |
 | [Surgical Post-Training](docs/post-training_surgical.md) | Open-H multi-embodiment, CMR-only, and downstream fine-tuning |
+| [Teacher-to-Causal-Student Tutorial](docs/tutorial_teacher_training_and_self_forcing.md) | Custom-data teacher fine-tuning, long-horizon Self Forcing distillation, and real-time Cosmos-H-Dreams deployment |
 | [Evaluation](scripts/README_EVALUATION.md) | Quantitative evaluation pipeline (FDS, GATC, TCD metrics) |
 | [Action Space](scripts/README_ACTION_SPACE.md) | Unified 44D action space for multi-embodiment training |
 | [Codebase Guide](docs/codebase-guide.md) | Key source files, data flow, and adding new embodiments |
