@@ -16,9 +16,11 @@
 # Configs for resuming from stage3 training
 
 import functools
+import os
 
 from hydra.core.config_store import ConfigStore
 
+from cosmos_predict2._src.imaginaire.functional.lr_scheduler import LambdaWarmUpCosineScheduler
 from cosmos_predict2._src.imaginaire.lazy_config import LazyCall as L
 from cosmos_predict2._src.imaginaire.lazy_config import LazyDict
 from cosmos_predict2._src.imaginaire.utils.checkpoint_db import get_checkpoint_path
@@ -36,6 +38,20 @@ from cosmos_predict2._src.predict2.text_encoders.text_encoder import EmbeddingCo
 from cosmos_predict2.config import MODEL_CHECKPOINTS, ModelKey
 
 DEFAULT_CHECKPOINT = MODEL_CHECKPOINTS[ModelKey()]  # This uses post_trained=True by default
+
+_TABLETOP_OUTPUT_ROOT = os.environ.get("IMAGINAIRE_OUTPUT_ROOT", "imaginaire/output")
+_TABLETOP_CHSS_CHECKPOINT = os.environ.get(
+    "CHSS_CHECKPOINT_DIR",
+    "checkpoints/cosmos-h-surgical-simulator",
+)
+
+
+def _tabletop_teacher_checkpoint(run_name: str, iteration: int) -> str:
+    return (
+        f"{_TABLETOP_OUTPUT_ROOT}/cosmos_predict2_action_conditioned/"
+        f"official_runs_vid2vid/{run_name}/checkpoints/iter_{iteration:09d}"
+    )
+
 
 _TRAINER_DEBUG_CONFIG = dict(
     max_iter=1000,
@@ -951,6 +967,108 @@ AC_CHUNK_SINGLE_VIEW_2B_SUTUREBOT_13FRAME_NODES_OSS = LazyDict(
     flags={"allow_objects": True},
 )
 
+# =============================================================================
+# JHU dVRK monocular reference tabletop recipe
+# =============================================================================
+AC_CHUNK_SINGLE_VIEW_2B_JHU_DVRK_MONO_FINETUNE_13FRAME_8NODES_OSS = LazyDict(
+    dict(
+        defaults=[
+            "/experiment/2b_bridge_action_conditioned_oss",
+            {"override /net": "cosmos_v1_2B_action_chunk_conditioned"},
+            {"override /data_train": "jhu_dvrk_mono_finetune_train"},
+            {"override /data_val": "jhu_dvrk_mono_finetune_val"},
+            "_self_",
+        ],
+        job=dict(
+            group="official_runs_vid2vid",
+            name="cosmos_predict2p5_2B_action_conditioned_jhu_dvrk_mono_finetune_13frame_8nodes_release_oss",
+            project="cosmos_predict2_action_conditioned",
+        ),
+        checkpoint=dict(
+            load_path=_TABLETOP_CHSS_CHECKPOINT,
+            load_training_state=False,
+            strict_resume=False,
+        ),
+        model=dict(
+            config=dict(
+                state_t=1 + 12 // 4,
+                net=dict(action_dim=44),
+            ),
+        ),
+        dataloader_train=dict(batch_size=16),
+        optimizer=dict(lr=1.6e-4, weight_decay=0.1),
+        trainer=dict(max_iter=16000),
+    ),
+    flags={"allow_objects": True},
+)
+
+_JHU_H13_TEACHER_RUN = "cosmos_predict2p5_2B_action_conditioned_jhu_dvrk_mono_finetune_13frame_8nodes_release_oss"
+AC_CHUNK_SINGLE_VIEW_2B_JHU_DVRK_MONO_FINETUNE_13FRAME_8NODES_OSS_FINE_ANNEAL_4K = LazyDict(
+    dict(
+        defaults=[
+            f"/experiment/{_JHU_H13_TEACHER_RUN}",
+            "_self_",
+        ],
+        job=dict(
+            group="official_runs_vid2vid",
+            name=f"{_JHU_H13_TEACHER_RUN}_fine_anneal_4k",
+            project="cosmos_predict2_action_conditioned",
+        ),
+        checkpoint=dict(
+            load_path=_tabletop_teacher_checkpoint(_JHU_H13_TEACHER_RUN, 16000),
+            load_training_state=False,
+            strict_resume=False,
+        ),
+        scheduler=L(LambdaWarmUpCosineScheduler)(
+            warm_up_steps=[100],
+            f_start=[0.10],
+            f_max=[1.00],
+            f_min=[0.05],
+            cycle_lengths=[4000],
+        ),
+        trainer=dict(max_iter=4000),
+    ),
+    flags={"allow_objects": True},
+)
+
+AC_CHUNK_SINGLE_VIEW_2B_JHU_DVRK_MONO_TABLETOP_H73_8NODES_OSS = LazyDict(
+    dict(
+        defaults=[
+            f"/experiment/{_JHU_H13_TEACHER_RUN}",
+            {"override /data_train": "jhu_dvrk_mono_finetune_h73_train"},
+            {"override /data_val": "jhu_dvrk_mono_finetune_h73_val"},
+            "_self_",
+        ],
+        job=dict(
+            group="official_runs_vid2vid",
+            name=f"{_JHU_H13_TEACHER_RUN}_h73_tabletop",
+            project="cosmos_predict2_action_conditioned",
+        ),
+        checkpoint=dict(
+            load_path=_tabletop_teacher_checkpoint(f"{_JHU_H13_TEACHER_RUN}_fine_anneal_4k", 4000),
+            load_training_state=False,
+            strict_resume=False,
+        ),
+        model=dict(
+            config=dict(
+                state_t=1 + 72 // 4,
+                net=dict(action_dim=44),
+            ),
+        ),
+        dataloader_train=dict(batch_size=4),
+        optimizer=dict(lr=4e-5, weight_decay=0.1),
+        scheduler=L(LambdaWarmUpCosineScheduler)(
+            warm_up_steps=[1000],
+            f_start=[0.10],
+            f_max=[1.00],
+            f_min=[0.05],
+            cycle_lengths=[5000],
+        ),
+        trainer=dict(max_iter=5000),
+    ),
+    flags={"allow_objects": True},
+)
+
 
 cs = ConfigStore.instance()
 
@@ -1004,6 +1122,18 @@ for _item, _item_wo_resume, _item_mock_wo_resume in [
     [
         AC_CHUNK_SINGLE_VIEW_2B_SUTUREBOT_13FRAME_NODES_OSS,
         *build_debug_runs(AC_CHUNK_SINGLE_VIEW_2B_SUTUREBOT_13FRAME_NODES_OSS),
+    ],
+    [
+        AC_CHUNK_SINGLE_VIEW_2B_JHU_DVRK_MONO_FINETUNE_13FRAME_8NODES_OSS,
+        *build_debug_runs(AC_CHUNK_SINGLE_VIEW_2B_JHU_DVRK_MONO_FINETUNE_13FRAME_8NODES_OSS),
+    ],
+    [
+        AC_CHUNK_SINGLE_VIEW_2B_JHU_DVRK_MONO_FINETUNE_13FRAME_8NODES_OSS_FINE_ANNEAL_4K,
+        *build_debug_runs(AC_CHUNK_SINGLE_VIEW_2B_JHU_DVRK_MONO_FINETUNE_13FRAME_8NODES_OSS_FINE_ANNEAL_4K),
+    ],
+    [
+        AC_CHUNK_SINGLE_VIEW_2B_JHU_DVRK_MONO_TABLETOP_H73_8NODES_OSS,
+        *build_debug_runs(AC_CHUNK_SINGLE_VIEW_2B_JHU_DVRK_MONO_TABLETOP_H73_8NODES_OSS),
     ],
 ]:
     cs.store(group="experiment", package="_global_", name=f"{_item['job']['name']}", node=_item)

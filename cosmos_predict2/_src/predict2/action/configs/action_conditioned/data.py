@@ -276,6 +276,8 @@ cmr_versius_256_val_dataloader = L(DataLoader)(
 # ============================================================================
 from cosmos_predict2._src.predict2.action.datasets.gr00t_dreams.data.dataset import MixedLeRobotDataset
 from cosmos_predict2._src.predict2.action.datasets.gr00t_dreams.groot_configs import (
+    JHU_DVRK_MONO_FINETUNE_TRAIN_DATASET_SPECS,
+    JHU_DVRK_MONO_FINETUNE_VAL_DATASET_SPECS,
     MAX_ACTION_DIM,
     OPEN_H_DATASET_SPECS,
 )
@@ -306,6 +308,67 @@ open_h_multi_train_dataloader = L(DataLoader)(
 open_h_multi_val_dataloader = L(DataLoader)(
     dataset=open_h_multi_val_dataset,
     sampler=L(get_sampler)(dataset=open_h_multi_val_dataset),
+    batch_size=1,
+    drop_last=True,
+)
+
+# ============================================================================
+# JHU dVRK monocular reference tabletop mixture
+# ============================================================================
+jhu_dvrk_mono_finetune_train_dataset = L(MixedLeRobotDataset)(
+    dataset_specs=JHU_DVRK_MONO_FINETUNE_TRAIN_DATASET_SPECS,
+    num_frames=13,
+    data_split="train",
+    max_action_dim=MAX_ACTION_DIM,
+    downscaled_res=False,
+    test_split_ratio=0.02,
+)
+jhu_dvrk_mono_finetune_val_dataset = L(MixedLeRobotDataset)(
+    dataset_specs=JHU_DVRK_MONO_FINETUNE_VAL_DATASET_SPECS,
+    num_frames=13,
+    data_split="test",
+    max_action_dim=MAX_ACTION_DIM,
+    downscaled_res=False,
+    test_split_ratio=0.02,
+)
+jhu_dvrk_mono_finetune_train_dataloader = L(DataLoader)(
+    dataset=jhu_dvrk_mono_finetune_train_dataset,
+    sampler=L(get_sampler)(dataset=jhu_dvrk_mono_finetune_train_dataset),
+    batch_size=1,
+    drop_last=True,
+)
+jhu_dvrk_mono_finetune_val_dataloader = L(DataLoader)(
+    dataset=jhu_dvrk_mono_finetune_val_dataset,
+    sampler=L(get_sampler)(dataset=jhu_dvrk_mono_finetune_val_dataset),
+    batch_size=1,
+    drop_last=True,
+)
+
+jhu_dvrk_mono_finetune_h73_train_dataset = L(MixedLeRobotDataset)(
+    dataset_specs=JHU_DVRK_MONO_FINETUNE_TRAIN_DATASET_SPECS,
+    num_frames=73,
+    data_split="train",
+    max_action_dim=MAX_ACTION_DIM,
+    downscaled_res=False,
+    test_split_ratio=0.02,
+)
+jhu_dvrk_mono_finetune_h73_val_dataset = L(MixedLeRobotDataset)(
+    dataset_specs=JHU_DVRK_MONO_FINETUNE_VAL_DATASET_SPECS,
+    num_frames=73,
+    data_split="test",
+    max_action_dim=MAX_ACTION_DIM,
+    downscaled_res=False,
+    test_split_ratio=0.02,
+)
+jhu_dvrk_mono_finetune_h73_train_dataloader = L(DataLoader)(
+    dataset=jhu_dvrk_mono_finetune_h73_train_dataset,
+    sampler=L(get_sampler)(dataset=jhu_dvrk_mono_finetune_h73_train_dataset),
+    batch_size=1,
+    drop_last=True,
+)
+jhu_dvrk_mono_finetune_h73_val_dataloader = L(DataLoader)(
+    dataset=jhu_dvrk_mono_finetune_h73_val_dataset,
+    sampler=L(get_sampler)(dataset=jhu_dvrk_mono_finetune_h73_val_dataset),
     batch_size=1,
     drop_last=True,
 )
@@ -451,6 +514,32 @@ def register_training_and_val_data():
         package="dataloader_val",
         name="open_h_multi_val",
         node=open_h_multi_val_dataloader,
+    )
+
+    # JHU dVRK monocular tabletop reference recipe (short and long horizons).
+    cs.store(
+        group="data_train",
+        package="dataloader_train",
+        name="jhu_dvrk_mono_finetune_train",
+        node=jhu_dvrk_mono_finetune_train_dataloader,
+    )
+    cs.store(
+        group="data_val",
+        package="dataloader_val",
+        name="jhu_dvrk_mono_finetune_val",
+        node=jhu_dvrk_mono_finetune_val_dataloader,
+    )
+    cs.store(
+        group="data_train",
+        package="dataloader_train",
+        name="jhu_dvrk_mono_finetune_h73_train",
+        node=jhu_dvrk_mono_finetune_h73_train_dataloader,
+    )
+    cs.store(
+        group="data_val",
+        package="dataloader_val",
+        name="jhu_dvrk_mono_finetune_h73_val",
+        node=jhu_dvrk_mono_finetune_h73_val_dataloader,
     )
 
     # ============================================================================

@@ -13,6 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
+
 from cosmos_predict2._src.predict2.action.datasets.gr00t_dreams.data.dataset import ModalityConfig
 from cosmos_predict2._src.predict2.action.datasets.gr00t_dreams.data.embodiment_tags import EmbodimentTag
 from cosmos_predict2._src.predict2.action.datasets.gr00t_dreams.data.transform.base import ComposedModalityTransform
@@ -603,12 +605,12 @@ MAX_ACTION_DIM = 44
 #   | **Total**              |             | **8.000** | **100%**   |
 #
 # Frame counts sourced from gr00t-H exp62/exp79/exp86 configs and info.json.
-# Dataset paths below are cluster defaults; override in experiment configs.
+# Dataset paths below are portable defaults; override them with environment variables.
 # =============================================================================
 
-# Base paths (override per cluster / experiment)
-_OPEN_H_BASE = "/lustre/fsw/portfolios/healthcareeng/projects/healthcareeng_holoscan/datasets/Open-H"
-_JHU_BASE = "/lustre/fsw/portfolios/healthcareeng/users/lzbinden/cache/huggingface/lerobot/jhu"
+# Base paths (override per cluster / experiment).
+_OPEN_H_BASE = os.environ.get("OPEN_H_DATA_ROOT", "datasets/open_h")
+_JHU_BASE = os.environ.get("JHU_DATA_ROOT", "datasets/jhu")
 _LSCR_BASE = f"{_OPEN_H_BASE}/Surgical/JHU/LSCR"
 _STANFORD_BASE = (
     f"{_OPEN_H_BASE}/Surgical/Stanford/Collaborative Haptics and Robotics in Medicine Lab/Real Robot (dVRK)"
@@ -797,6 +799,75 @@ OPEN_H_DATASET_SPECS: list[dict] = [
         "exclude_splits": ["missing_scope_videos"],
     },  # 12,020 frames
 ]
+
+# =============================================================================
+# JHU dVRK monocular reference tabletop fine-tuning mixture
+# =============================================================================
+# Point this environment variable at a directory containing the nine LeRobot
+# datasets listed below. Frame-count mix ratios keep sampling approximately
+# frame-proportional instead of heavily oversampling the smallest subsets.
+_JHU_TABLETOP_DATA_ROOT = os.environ.get("JHU_TABLETOP_DATA_ROOT", "datasets/jhu_tabletop")
+
+_JHU_DVRK_MONO_FINETUNE_NON_OOD_SPECS: list[dict] = [
+    {
+        "path": f"{_JHU_TABLETOP_DATA_ROOT}/hf_suturebot",
+        "embodiment": EmbodimentTag.JHU_DVRK_MONO,
+        "mix_ratio": 516334.0,
+        "test_split_ratio_override": 0.01,
+    },
+    {
+        "path": f"{_JHU_TABLETOP_DATA_ROOT}/knot_tying",
+        "embodiment": EmbodimentTag.JHU_DVRK_MONO,
+        "mix_ratio": 209253.0,
+        "test_split_ratio_override": 0.01,
+    },
+    {
+        "path": f"{_JHU_TABLETOP_DATA_ROOT}/suture_bot_success",
+        "embodiment": EmbodimentTag.JHU_DVRK_MONO,
+        "mix_ratio": 1557.0,
+    },
+    {
+        "path": f"{_JHU_TABLETOP_DATA_ROOT}/suture_bot_failure",
+        "embodiment": EmbodimentTag.JHU_DVRK_MONO,
+        "mix_ratio": 8793.0,
+    },
+    {
+        "path": f"{_JHU_TABLETOP_DATA_ROOT}/cosmos_fail_filtered",
+        "embodiment": EmbodimentTag.JHU_DVRK_MONO,
+        "mix_ratio": 12948.0,
+    },
+    {
+        "path": f"{_JHU_TABLETOP_DATA_ROOT}/cosmos_throw_fail_demo",
+        "embodiment": EmbodimentTag.JHU_DVRK_MONO,
+        "mix_ratio": 54581.0,
+        "test_split_ratio_override": 0.01,
+    },
+    {
+        "path": f"{_JHU_TABLETOP_DATA_ROOT}/cosmos_knot_fail_demo",
+        "embodiment": EmbodimentTag.JHU_DVRK_MONO,
+        "mix_ratio": 30502.0,
+    },
+    {
+        "path": f"{_JHU_TABLETOP_DATA_ROOT}/suturebot_act_throw_eval",
+        "embodiment": EmbodimentTag.JHU_DVRK_MONO,
+        "mix_ratio": 11548.0,
+    },
+]
+
+_JHU_DVRK_MONO_FINETUNE_OOD_SPEC: dict = {
+    "path": f"{_JHU_TABLETOP_DATA_ROOT}/ood",
+    "embodiment": EmbodimentTag.JHU_DVRK_MONO,
+    "mix_ratio": 227990.0,
+    "data_split_override": "full",
+}
+
+JHU_DVRK_MONO_FINETUNE_TRAIN_DATASET_SPECS: list[dict] = [
+    *_JHU_DVRK_MONO_FINETUNE_NON_OOD_SPECS,
+    _JHU_DVRK_MONO_FINETUNE_OOD_SPEC,
+]
+
+# OOD trajectories are intentionally train-only in the reference recipe.
+JHU_DVRK_MONO_FINETUNE_VAL_DATASET_SPECS: list[dict] = list(_JHU_DVRK_MONO_FINETUNE_NON_OOD_SPECS)
 
 # Derived: the set of all Open-H embodiment tag strings.
 # Used by dataset.py to enforce stats_cosmos.json requirement.
