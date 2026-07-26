@@ -73,21 +73,16 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
-from cosmos_predict2._src.predict2.action.datasets.gr00t_dreams.data.embodiment_tags import EmbodimentTag
 from cosmos_predict2._src.predict2.action.datasets.gr00t_dreams.data.dataset import (
-    LE_ROBOT_INFO_FILENAME,
     resolve_excluded_episode_indices,
 )
-from cosmos_predict2._src.predict2.action.datasets.gr00t_dreams.data.schema import (
-    LeRobotModalityMetadata,
-    LeRobotStateActionMetadata,
+from cosmos_predict2._src.predict2.action.datasets.gr00t_dreams.data.embodiment_tags import EmbodimentTag
+from cosmos_predict2._src.predict2.action.datasets.gr00t_dreams.data.transform.state_action import (
+    convert_to_hybrid_relative,
 )
 from cosmos_predict2._src.predict2.action.datasets.gr00t_dreams.groot_configs import (
     EMBODIMENT_REGISTRY,
     OPEN_H_DATASET_SPECS,
-)
-from cosmos_predict2._src.predict2.action.datasets.gr00t_dreams.data.transform.state_action import (
-    convert_to_hybrid_relative,
 )
 
 # Maximum parallel workers
@@ -97,6 +92,7 @@ MAX_WORKERS = 64
 # ============================================================================
 # Statistics helpers (streaming, memory-efficient)
 # ============================================================================
+
 
 class StreamingStats:
     """Memory-efficient streaming statistics using Welford's algorithm + reservoir sampling."""
@@ -129,11 +125,11 @@ class StreamingStats:
             n_total = self.count + n
             delta = batch_mean - self.mean
             self.mean = (self.count * self.mean + n * batch_mean) / n_total
-            self.M2 = self.M2 + batch_M2 + delta ** 2 * self.count * n / n_total
+            self.M2 = self.M2 + batch_M2 + delta**2 * self.count * n / n_total
             self.count = n_total
         # Reservoir sampling
         if self.reservoir is None:
-            self.reservoir = batch[:self.reservoir_size].copy()
+            self.reservoir = batch[: self.reservoir_size].copy()
             self.reservoir_count = n
         elif len(self.reservoir) < self.reservoir_size:
             space = self.reservoir_size - len(self.reservoir)
@@ -171,6 +167,7 @@ class StreamingStats:
 # ============================================================================
 # Main processing
 # ============================================================================
+
 
 def _is_lerobot_dataset(path: Path) -> bool:
     return (path / "data").is_dir() and (path / "meta").is_dir() and any((path / "data").rglob("*.parquet"))
@@ -272,7 +269,7 @@ def _process_episode_parquet(
                 raw_dim = key_data_raw.shape[1]
 
                 # Extract this key's action horizon data
-                key_action = action_horizon[:, offset:offset + raw_dim]
+                key_action = action_horizon[:, offset : offset + raw_dim]
 
                 if cfg is not None and cfg.rep == "rel_xyz_rot6d":
                     # Get reference state pose
@@ -285,7 +282,7 @@ def _process_episode_parquet(
                             sk_data = extract_key_data(sk, df)
                             sk_dim = sk_data.shape[1]
                             if sk == ref_key:
-                                ref_pose = state_row[s_off:s_off + sk_dim]
+                                ref_pose = state_row[s_off : s_off + sk_dim]
                                 break
                             s_off += sk_dim
 
@@ -324,7 +321,7 @@ def _process_episode_parquet(
                             sk_data = extract_key_data(sk, df)
                             sk_dim = sk_data.shape[1]
                             if sk == ref_key:
-                                ref_val = state_row[s_off:s_off + sk_dim]
+                                ref_val = state_row[s_off : s_off + sk_dim]
                                 break
                             s_off += sk_dim
                         if ref_val is not None:
@@ -355,12 +352,13 @@ def _process_episode_parquet(
 
         warn = None
         if n_skipped > 0:
-            warn = (f"{parquet_path.name}: {n_skipped}/{effective_length} samples skipped "
-                    f"(zero-norm quaternions), {len(all_action_rows)} valid")
+            warn = (
+                f"{parquet_path.name}: {n_skipped}/{effective_length} samples skipped "
+                f"(zero-norm quaternions), {len(all_action_rows)} valid"
+            )
         return actions, states, warn
 
     except Exception as e:
-        import traceback
         return np.empty((0, 0)), np.empty((0, 0)), f"Error processing {parquet_path.name}: {type(e).__name__}: {e}"
 
 
@@ -432,9 +430,7 @@ def process_single_dataset(
     registry_timestep_interval = reg["timestep_interval"]
     if timestep_interval_override is not None:
         if timestep_interval_override < 1:
-            raise ValueError(
-                f"--timestep-interval must be >= 1, got {timestep_interval_override}"
-            )
+            raise ValueError(f"--timestep-interval must be >= 1, got {timestep_interval_override}")
         timestep_interval = int(timestep_interval_override)
     else:
         timestep_interval = registry_timestep_interval
@@ -549,8 +545,10 @@ def process_single_dataset(
     if episodes_with_warnings > 10:
         print(f"  [WARN] {episodes_with_warnings} episodes had warnings (showing first 10)")
     if episodes_empty > 0:
-        print(f"  [INFO] {episodes_empty}/{len(parquet_files)} episodes produced no valid samples "
-              f"(zero-norm quaternions or empty episodes)")
+        print(
+            f"  [INFO] {episodes_empty}/{len(parquet_files)} episodes produced no valid samples "
+            f"(zero-norm quaternions or empty episodes)"
+        )
 
     if action_tracker is None or action_tracker.count == 0:
         print(f"  ERROR: No valid samples found! ({episodes_empty} empty, {episodes_with_warnings} warnings)")
@@ -665,8 +663,10 @@ def process_single_dataset(
 
     for key, (s, e) in action_key_dims.items():
         dim = e - s
-        print(f"  {key} ({dim}D): mean_abs={np.mean(np.abs(action_global['mean'][s:e])):.6f}, "
-              f"std_mean={np.mean(action_global['std'][s:e]):.6f}")
+        print(
+            f"  {key} ({dim}D): mean_abs={np.mean(np.abs(action_global['mean'][s:e])):.6f}, "
+            f"std_mean={np.mean(action_global['std'][s:e]):.6f}"
+        )
 
     return True
 
@@ -834,37 +834,56 @@ def main():
     # --- mutually exclusive: --all  vs  --dataset-path / --dataset-path-root ---
     path_group = parser.add_mutually_exclusive_group(required=True)
     path_group.add_argument(
-        "--all", action="store_true",
+        "--all",
+        action="store_true",
         help="Process every dataset in OPEN_H_DATASET_SPECS (skips CMR Versius)",
     )
-    path_group.add_argument("--dataset-path", type=str,
-                            help="Path to a single LeRobot dataset")
-    path_group.add_argument("--dataset-path-root", type=str,
-                            help="Root directory containing multiple LeRobot datasets")
+    path_group.add_argument("--dataset-path", type=str, help="Path to a single LeRobot dataset")
+    path_group.add_argument("--dataset-path-root", type=str, help="Root directory containing multiple LeRobot datasets")
 
-    parser.add_argument("--embodiment", type=str, default=None,
-                        choices=list(EMBODIMENT_REGISTRY.keys()),
-                        help="Embodiment tag (required for --dataset-path / --dataset-path-root; "
-                             "ignored for --all)")
-    parser.add_argument("--exclude-splits", type=str, nargs="+", default=None,
-                        help="Split names from info.json to exclude (e.g., --exclude-splits fail bad_frames). "
-                             "For --all mode, exclude_splits from OPEN_H_DATASET_SPECS are used automatically.")
-    parser.add_argument("--num-frames", type=int, default=13,
-                        help="Number of video frames (default: 13 = 1 context + 12 prediction)")
-    parser.add_argument("--max-samples", type=int, default=None,
-                        help="Max episodes per dataset (for quick testing)")
-    parser.add_argument("--num-workers", type=int, default=None,
-                        help=f"Number of parallel workers (default: min(cpu_count, {MAX_WORKERS}))")
-    parser.add_argument("--output-filename", type=str, default="stats_cosmos.json",
-                        help="Output filename in meta/ dir (default: stats_cosmos.json)")
-    parser.add_argument("--timestep-interval", type=int, default=None,
-                        help="Override the 'timestep_interval' (action stride) that is otherwise "
-                             "read from EMBODIMENT_REGISTRY in groot_configs.py. Useful when you "
-                             "want to compute stats for a different effective training rate than "
-                             "the registry default (e.g. use 3 instead of 5 on a 30Hz dVRK dataset "
-                             "to target 10 Hz effective). IMPORTANT: if you override this here, "
-                             "the training pipeline MUST use the same value or the resulting "
-                             "stats_cosmos.json will not match the distribution the model sees.")
+    parser.add_argument(
+        "--embodiment",
+        type=str,
+        default=None,
+        choices=list(EMBODIMENT_REGISTRY.keys()),
+        help="Embodiment tag (required for --dataset-path / --dataset-path-root; ignored for --all)",
+    )
+    parser.add_argument(
+        "--exclude-splits",
+        type=str,
+        nargs="+",
+        default=None,
+        help="Split names from info.json to exclude (e.g., --exclude-splits fail bad_frames). "
+        "For --all mode, exclude_splits from OPEN_H_DATASET_SPECS are used automatically.",
+    )
+    parser.add_argument(
+        "--num-frames", type=int, default=13, help="Number of video frames (default: 13 = 1 context + 12 prediction)"
+    )
+    parser.add_argument("--max-samples", type=int, default=None, help="Max episodes per dataset (for quick testing)")
+    parser.add_argument(
+        "--num-workers",
+        type=int,
+        default=None,
+        help=f"Number of parallel workers (default: min(cpu_count, {MAX_WORKERS}))",
+    )
+    parser.add_argument(
+        "--output-filename",
+        type=str,
+        default="stats_cosmos.json",
+        help="Output filename in meta/ dir (default: stats_cosmos.json)",
+    )
+    parser.add_argument(
+        "--timestep-interval",
+        type=int,
+        default=None,
+        help="Override the 'timestep_interval' (action stride) that is otherwise "
+        "read from EMBODIMENT_REGISTRY in groot_configs.py. Useful when you "
+        "want to compute stats for a different effective training rate than "
+        "the registry default (e.g. use 3 instead of 5 on a 30Hz dVRK dataset "
+        "to target 10 Hz effective). IMPORTANT: if you override this here, "
+        "the training pipeline MUST use the same value or the resulting "
+        "stats_cosmos.json will not match the distribution the model sees.",
+    )
     args = parser.parse_args()
 
     # Validate: --dataset-path / --dataset-path-root require --embodiment

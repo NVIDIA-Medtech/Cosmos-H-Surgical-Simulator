@@ -152,8 +152,7 @@ def main() -> int:
     args = parse_arguments()
     if args.num_frames < 2 or (args.num_frames - 1) % 4 != 0:
         print(
-            f"ERROR: --num-frames must be >= 2 and satisfy "
-            f"(num_frames-1) % 4 == 0; got {args.num_frames}",
+            f"ERROR: --num-frames must be >= 2 and satisfy (num_frames-1) % 4 == 0; got {args.num_frames}",
             file=sys.stderr,
         )
         return 2
@@ -182,16 +181,12 @@ def main() -> int:
         )
     except ImportError as error:
         print(
-            f"ERROR: failed to import runtime dependencies: {error}\n"
-            "Run inside the Cosmos-Predict2.5 environment.",
+            f"ERROR: failed to import runtime dependencies: {error}\nRun inside the Cosmos-Predict2.5 environment.",
             file=sys.stderr,
         )
         return 2
 
-    subset_to_path = {
-        Path(spec["path"]).name: spec["path"]
-        for spec in JHU_DVRK_MONO_FINETUNE_TRAIN_DATASET_SPECS
-    }
+    subset_to_path = {Path(spec["path"]).name: spec["path"] for spec in JHU_DVRK_MONO_FINETUNE_TRAIN_DATASET_SPECS}
     num_actions = args.num_frames - 1
     raw_chunk_stride = num_actions * args.timestep_interval
     output_dir = Path(args.output_dir).expanduser().resolve()
@@ -304,9 +299,7 @@ def main() -> int:
         "episode_specs": episode_specs,
         "manifest_file": manifest_path.name,
     }
-    (output_dir / f"{args.tag}_inference_manifest_provenance.json").write_text(
-        json.dumps(provenance, indent=2)
-    )
+    (output_dir / f"{args.tag}_inference_manifest_provenance.json").write_text(json.dumps(provenance, indent=2))
     print(f"Wrote {len(manifest_entries)} entries to {manifest_path}")
     return 0
 

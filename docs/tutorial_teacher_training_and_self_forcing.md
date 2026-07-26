@@ -1147,4 +1147,3 @@ Pre-download shared text embeddings and checkpoint assets to a mounted cache. Av
 - Cosmos-Surg-dVRK: *World Foundation Model-based Automated Online Evaluation of Surgical Robot Policy Learning*: [https://arxiv.org/abs/2510.16240](https://arxiv.org/abs/2510.16240)
 - Self Forcing: *Bridging the Train-Test Gap in Autoregressive Video Diffusion*: [https://arxiv.org/abs/2506.08009](https://arxiv.org/abs/2506.08009)
 - NVIDIA OmniDreams: *Real-Time Generative World Model for Closed-Loop Autonomous Vehicle Simulation*: [https://arxiv.org/abs/2606.03159](https://arxiv.org/abs/2606.03159)
-

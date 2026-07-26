@@ -52,6 +52,7 @@ def _tabletop_teacher_checkpoint(run_name: str, iteration: int) -> str:
         f"official_runs_vid2vid/{run_name}/checkpoints/iter_{iteration:09d}"
     )
 
+
 _TRAINER_DEBUG_CONFIG = dict(
     max_iter=1000,
     logging_iter=50,
@@ -1001,10 +1002,7 @@ AC_CHUNK_SINGLE_VIEW_2B_JHU_DVRK_MONO_FINETUNE_13FRAME_8NODES_OSS = LazyDict(
     flags={"allow_objects": True},
 )
 
-_JHU_H13_TEACHER_RUN = (
-    "cosmos_predict2p5_2B_action_conditioned_jhu_dvrk_mono_"
-    "finetune_13frame_8nodes_release_oss"
-)
+_JHU_H13_TEACHER_RUN = "cosmos_predict2p5_2B_action_conditioned_jhu_dvrk_mono_finetune_13frame_8nodes_release_oss"
 AC_CHUNK_SINGLE_VIEW_2B_JHU_DVRK_MONO_FINETUNE_13FRAME_8NODES_OSS_FINE_ANNEAL_4K = LazyDict(
     dict(
         defaults=[
