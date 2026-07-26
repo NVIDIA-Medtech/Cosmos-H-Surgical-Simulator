@@ -14,13 +14,29 @@
 # limitations under the License.
 
 import math
+import os
 
 from hydra.core.config_store import ConfigStore
 
 from cosmos_predict2._src.imaginaire.lazy_config import LazyDict
-from cosmos_predict2._src.predict2.distill.utils.config_helper import build_no_s3_run, deep_update_config_dict
+from cosmos_predict2._src.predict2.distill.utils.config_helper import (
+    build_no_s3_run,
+    build_no_s3_run_v2,
+    deep_update_config_dict,
+)
 from cosmos_predict2._src.predict2.models.video2world_model import HighSigmaStrategy
 from cosmos_predict2._src.predict2.text_encoders.text_encoder import EmbeddingConcatStrategy
+
+_TABLETOP_OUTPUT_ROOT = os.environ.get("IMAGINAIRE_OUTPUT_ROOT", "imaginaire/output")
+_JHU_H73_WARMUP_CHECKPOINT = (
+    f"{_TABLETOP_OUTPUT_ROOT}/cosmos_predict2_action_conditioned/interactive_warmup/"
+    "jhu_dvrk_mono_i4_lr3e-5_h73_tabletop_no_s3_resumable/checkpoints/iter_000018000"
+)
+_JHU_H73_TEACHER_MODEL = (
+    f"{_TABLETOP_OUTPUT_ROOT}/cosmos_predict2_action_conditioned/official_runs_vid2vid/"
+    "cosmos_predict2p5_2B_action_conditioned_jhu_dvrk_mono_finetune_13frame_"
+    "8nodes_release_oss_h73_tabletop/checkpoints/iter_000005000/model"
+)
 
 
 def make_experiment(
@@ -277,6 +293,35 @@ ACTION_GR00T_G1_SELF_FORCING = make_experiment(
     ),
 )
 
+ACTION_JHU_DVRK_MONO_TABLETOP_H73_SELF_FORCING = make_experiment(
+    name="jhu_dvrk_mono_i4-sf_h73_tabletop",
+    data="jhu_dvrk_mono_warmup_h73",
+    overrides=dict(
+        job=dict(
+            project="cosmos_predict2_action_conditioned",
+            group="interactive_self_forcing",
+        ),
+        checkpoint=dict(load_path=_JHU_H73_WARMUP_CHECKPOINT),
+        trainer=dict(max_iter=3000),
+        optimizer=dict(lr=5e-8),
+        model=dict(
+            config=dict(
+                state_t=1 + 72 // 4,
+                net=dict(action_dim=44),
+                net_fake_score=dict(action_dim=44),
+                net_teacher=dict(action_dim=44),
+                optimizer_discriminator_config=dict(lr=5e-6),
+                optimizer_fake_score_config=dict(lr=5e-6),
+                resolution="288",
+                teacher_load_from=dict(
+                    load_path=_JHU_H73_TEACHER_MODEL,
+                    credentials="",
+                ),
+            ),
+        ),
+    ),
+)
+
 cs = ConfigStore.instance()
 
 cs.store(
@@ -296,4 +341,16 @@ cs.store(
     package="_global_",
     name="cosmos_predict2p5_2B_action_gr00t_gr1_self_forcing_no_s3",
     node=build_no_s3_run(ACTION_GR00T_GR1_SELF_FORCING),
+)
+cs.store(
+    group="experiment",
+    package="_global_",
+    name="cosmos_predict2p5_2B_action_jhu_dvrk_mono_tabletop_h73_self_forcing_no_s3_resumable",
+    node=build_no_s3_run_v2(
+        ACTION_JHU_DVRK_MONO_TABLETOP_H73_SELF_FORCING,
+        local_path=True,
+        resumable=True,
+        load_training_state=False,
+        wandb_mode="offline",
+    ),
 )
