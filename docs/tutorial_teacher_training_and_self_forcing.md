@@ -110,7 +110,7 @@ Examples are 13, 25, 49, and 73 frames.
 Follow [setup.md](setup.md), authenticate with Hugging Face, and download the C-H-S-S checkpoint.
 
 ```bash
-git clone https://github.com/nvidia-cosmos/Cosmos-H-Surgical-Simulator.git
+git clone https://github.com/NVIDIA-Medtech/Cosmos-H-Surgical-Simulator.git
 cd Cosmos-H-Surgical-Simulator
 git lfs pull
 
