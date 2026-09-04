@@ -129,6 +129,11 @@ LE_ROBOT_TASKS_FILENAME = "meta/tasks.jsonl"
 LE_ROBOT_STATS_FILENAME = "meta/stats.json"
 LE_ROBOT_DATA_FILENAME = "data/*/*.parquet"
 
+# Shared AgiBot-World metadata on the cluster the model was trained on. AgiBot datasets
+# that carry no meta/ files of their own were loaded through these. The directory does not
+# exist elsewhere; when it is absent the dataset's own meta/ files are used instead.
+AGIBOT_SHARED_META_DIR = Path("/mnt/amlfs-03/shared/datasets/agibot-beta-converted-0512/agibotworld")
+
 
 def _get_rank_prefix() -> str:
     """Get distributed rank prefix for logging.
@@ -436,6 +441,51 @@ class LeRobotSingleDataset(Dataset):
         """The tasks for the dataset."""
         return self._tasks
 
+    def _resolve_modality_meta_path(self) -> Path:
+        """Locate the modality metadata describing this dataset's state/action layout.
+
+        Falls back to the shared AgiBot-World copy when that directory is reachable, which
+        is how AgiBot datasets without their own metadata were loaded during training.
+
+        Returns:
+            Path of the modality metadata file to read.
+
+        Raises:
+            FileNotFoundError: If the dataset has no modality metadata and no fallback
+                is reachable.
+        """
+        modality_meta_path = self.dataset_path / self._modality_filename
+        if modality_meta_path.exists():
+            return modality_meta_path
+
+        agibot_fallback = AGIBOT_SHARED_META_DIR / "modality.json"
+        if agibot_fallback.exists():
+            print(
+                f"WARNING: {self._modality_filename} not found in {self.dataset_path}; "
+                f"falling back to {agibot_fallback}"
+            )
+            return agibot_fallback
+
+        cmr_hint = (
+            f"\nCMR Versius reads {LE_ROBOT_CMR_MODALITY_FILENAME}, which is a different file\n"
+            f"from the {LE_ROBOT_DEFAULT_MODALITY_FILENAME} used by the other embodiments. A dataset\n"
+            f"copy that predates the 44D release carries the latter but not the former.\n"
+            if self._modality_filename == LE_ROBOT_CMR_MODALITY_FILENAME
+            else ""
+        )
+        raise FileNotFoundError(
+            f"\n{'=' * 80}\n"
+            f"MISSING MODALITY METADATA\n"
+            f"{'=' * 80}\n"
+            f"Dataset:  {self.dataset_path}\n"
+            f"Expected: {modality_meta_path}\n\n"
+            f"This file declares the state and action layout of the dataset and must sit in\n"
+            f"the dataset's meta/ directory. The released datasets ship it, so if it is\n"
+            f"missing the download is incomplete.\n"
+            f"{cmr_hint}"
+            f"{'=' * 80}\n"
+        )
+
     def _get_metadata(self, embodiment_tag: EmbodimentTag) -> DatasetMetadata:
         """Get the metadata for the dataset.
 
@@ -444,15 +494,7 @@ class LeRobotSingleDataset(Dataset):
         """
 
         # 1. Modality metadata
-        modality_meta_path = self.dataset_path / self._modality_filename
-        if not (modality_meta_path.exists()):
-            modality_meta_path = Path(
-                "/mnt/amlfs-03/shared/datasets/agibot-beta-converted-0512/agibotworld/modality.json"
-            )
-            print(
-                "WARNING: Could not find modality.json in dataset path, falling back to /mnt/amlfs-03/shared/datasets/agibot-beta-converted-0512/agibotworld/modality.json"
-            )
-        assert modality_meta_path.exists(), f"Please provide a {self._modality_filename} file in {self.dataset_path}"
+        modality_meta_path = self._resolve_modality_meta_path()
 
         # 1.1. State and action modalities
         simplified_modality_meta: dict[str, dict] = {}
@@ -572,11 +614,12 @@ class LeRobotSingleDataset(Dataset):
         #   - CMR: scripts/compute_cmr_action_stats.py  → stats_cosmos-44D.json
         #   - Others: scripts/compute_openh_action_stats.py → stats_cosmos.json
         stats_path = self.dataset_path / LE_ROBOT_STATS_FILENAME
-        if "agibot" in str(stats_path):
-            print(
-                "NOTE: Using standard action normalization at /mnt/amlfs-03/shared/datasets/agibot-beta-converted-0512/agibotworld/stats.json"
-            )
-            stats_path = Path("/mnt/amlfs-03/shared/datasets/agibot-beta-converted-0512/agibotworld/stats.json")
+        agibot_shared_stats = AGIBOT_SHARED_META_DIR / "stats.json"
+        if "agibot" in str(stats_path) and agibot_shared_stats.exists():
+            # AgiBot datasets were normalized against one shared stats file during training.
+            # Where that file is unreachable, the dataset's own meta/stats.json is used.
+            print(f"NOTE: Using the shared AgiBot-World action normalization at {agibot_shared_stats}")
+            stats_path = agibot_shared_stats
         elif embodiment_tag == EmbodimentTag.CMR_VERSIUS:
             # CMR Versius uses stats_cosmos-44D.json with hybrid-relative action statistics
             # (generated by scripts/compute_cmr_action_stats.py)
@@ -971,15 +1014,7 @@ class LeRobotSingleDataset(Dataset):
 
     def _get_lerobot_modality_meta(self) -> LeRobotModalityMetadata:
         """Get the metadata for the LeRobot dataset."""
-        modality_meta_path = self.dataset_path / self._modality_filename
-        if not (modality_meta_path.exists()):
-            modality_meta_path = Path(
-                "/mnt/amlfs-03/shared/datasets/agibot-beta-converted-0512/agibotworld/modality.json"
-            )
-            print(
-                "WARNING: Could not find modality.json in dataset path, falling back to /mnt/amlfs-03/shared/datasets/agibot-beta-converted-0512/agibotworld/modality.json"
-            )
-        assert modality_meta_path.exists(), f"Please provide a {self._modality_filename} file in {self.dataset_path}"
+        modality_meta_path = self._resolve_modality_meta_path()
         with open(modality_meta_path, "r") as f:
             modality_meta = LeRobotModalityMetadata.model_validate(json.load(f))
         return modality_meta
