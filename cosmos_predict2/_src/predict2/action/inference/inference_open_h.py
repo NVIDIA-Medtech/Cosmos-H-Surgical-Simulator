@@ -273,6 +273,23 @@ def main():
     episode_ids = [int(x) for x in args.episode_ids.split(",")]
     logger.info(f"Requested episodes: {episode_ids}")
 
+    # Check the request against the split before loading the checkpoint, so that an episode
+    # selection that cannot produce anything fails here instead of after a multi-GB load.
+    missing = [e for e in episode_ids if e not in episode_map]
+    if missing:
+        available = sorted(episode_map)
+        detail = (
+            f"Split '{args.data_split}' contains {len(available)} episodes, from {available[0]} to {available[-1]}."
+            if available
+            else f"Split '{args.data_split}' contains no episodes."
+        )
+        hint = (
+            "" if args.data_split == "full" else " Pass --data_split full to address any episode by its dataset index."
+        )
+        if len(missing) == len(episode_ids):
+            raise SystemExit(f"None of the requested episodes {missing} exist in this split. {detail}{hint}")
+        logger.warning(f"Requested episodes {missing} are not in this split and will be skipped. {detail}{hint}")
+
     # Initialize inference pipeline
     logger.info(f"Loading model from {args.ckpt_path}")
     video2world = ActionVideo2WorldInference(
@@ -468,12 +485,14 @@ def main():
         )
         logger.info(f"Total inference: {perf_stats['total_inference_time']:.2f}s | Avg FPS: {avg_fps:.2f}")
         logger.info(f"Avg chunk time: {avg_chunk_time:.2f}s | Avg episode time: {avg_episode_time:.2f}s")
-    else:
-        logger.warning("No episodes were successfully processed.")
 
     logger.info("=" * 60)
 
     video2world.cleanup()
+
+    if perf_stats["total_episodes"] == 0:
+        raise SystemExit(f"No episodes were successfully processed; nothing was written to {save_root}.")
+
     logger.info("Done!")
 
 
