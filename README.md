@@ -6,7 +6,7 @@
 [![Paper](https://img.shields.io/badge/arXiv-2511.00062-red.svg)](https://arxiv.org/abs/2511.00062)
 [![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://python.org)
 
-Action-conditioned world simulation for surgical robotics, built on NVIDIA Cosmos Predict2.5 and fine-tuned on the [Open-H](https://huggingface.co/datasets/nvidia/Open-H) multi-embodiment surgical benchmark.
+Action-conditioned world simulation for surgical robotics, built on NVIDIA Cosmos Predict2.5 and fine-tuned on the [Open-H](https://huggingface.co/datasets/nvidia/PhysicalAI-Robotics-Open-H-Embodiment) multi-embodiment surgical benchmark.
 
 <p align="center">
   <img src="assets/cosmos-predict-diagram.png" alt="Cosmos-H-Surgical-Simulator architecture" width="600"/>
@@ -52,7 +52,7 @@ All embodiments are zero-padded to 44D at the model input layer. See [`README_AC
 
 ## Open-H Benchmark
 
-Training uses **32 datasets across 9 embodiments** from the [Open-H](https://huggingface.co/datasets/nvidia/Open-H) collection, stored in [LeRobot](https://github.com/huggingface/lerobot) format. The data mixture allocates 50% of training compute to CMR Versius (4 surgical procedures) and 50% to all other embodiments (step-weighted by frame count).
+Training uses **32 datasets across 9 embodiments** from the [Open-H](https://huggingface.co/datasets/nvidia/PhysicalAI-Robotics-Open-H-Embodiment) collection, stored in [LeRobot](https://github.com/huggingface/lerobot) format. The data mixture allocates 50% of training compute to CMR Versius (4 surgical procedures) and 50% to all other embodiments (step-weighted by frame count).
 
 | Group | Datasets | Approx. Frames | Training Share |
 |---|---|---|---|
@@ -148,7 +148,7 @@ This project downloads and installs additional third-party open source software.
 ## Resources
 
 - [Cosmos Predict2.5 Paper](https://arxiv.org/abs/2511.00062) — Base model paper
-- [Open-H Dataset](https://huggingface.co/datasets/nvidia/Open-H) — Multi-embodiment surgical benchmark
+- [Open-H Dataset](https://huggingface.co/datasets/nvidia/PhysicalAI-Robotics-Open-H-Embodiment) — Multi-embodiment surgical benchmark
 - [HuggingFace](https://huggingface.co/nvidia/Cosmos-H-Surgical-Simulator) — Model weights and checkpoints
 - [Cosmos-H-Surgical](https://github.com/NVIDIA-Medtech/Cosmos-H-Surgical) — Sister repo (predict + transfer)
 - [Cosmos Predict2.5](https://github.com/nvidia-cosmos/cosmos-predict2.5) — Upstream base model

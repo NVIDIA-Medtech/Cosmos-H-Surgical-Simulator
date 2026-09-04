@@ -2,7 +2,7 @@
 
 This document describes the design of the unified 44-dimensional action
 conditioning space used by the Cosmos Predict-2.5 world model when fine-tuned
-on the [Open-H](https://huggingface.co/datasets/nvidia/Open-H) multi-embodiment
+on the [Open-H](https://huggingface.co/datasets/nvidia/PhysicalAI-Robotics-Open-H-Embodiment) multi-embodiment
 surgical robotics benchmark.  It also details how non-CMR embodiments map their
 native action spaces into the shared 44D vector via zero-padding, and documents
 the data mixture that governs how each dataset contributes to training.
