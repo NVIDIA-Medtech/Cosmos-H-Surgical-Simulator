@@ -31,13 +31,19 @@ via the transform pipeline).
 Action vectors are zero-padded to MAX_ACTION_DIM (44) to match the multi-embodiment
 training setup.
 
+Note on --data_split: the default "test" keeps only the trailing 5% of samples, which
+belong to the highest episode indices. Pass --data_split full when you want to address
+episodes by their dataset-wide index (for example --episode_ids 0,1,2); the log line
+"Episode IDs in map" lists what the selected split actually contains.
+
 Usage:
     # CMR Versius (same as before, just with --embodiment flag):
     CUDA_VISIBLE_DEVICES=0 PYTHONPATH=. python cosmos_predict2/_src/predict2/action/inference/inference_open_h.py \\
         --experiment cosmos_predict2p5_2B_action_conditioned_open_h_13frame_8nodes_release_oss \\
         --ckpt_path /path/to/checkpoint/model_ema_bf16.pt \\
-        --dataset_path /CMR_Versius/cholecystectomy_480p \\
+        --dataset_path /path/to/Open-H/Surgical/cmr_surgical/cholecystectomy \\
         --embodiment cmr_versius \\
+        --data_split full \\
         --episode_ids 0,1,2
 
     # dVRK JHU (monocular):
@@ -111,13 +117,16 @@ def parse_arguments() -> argparse.Namespace:
         type=str,
         default="test",
         choices=["train", "test", "full"],
-        help="Data split to use for evaluation",
+        help=(
+            "Data split to use for evaluation. 'test' is the trailing 5%% of samples, i.e. the "
+            "highest episode indices; use 'full' to address any episode by its dataset index"
+        ),
     )
     parser.add_argument(
         "--episode_ids",
         type=str,
         required=True,
-        help="Comma-separated list of episode IDs to evaluate (e.g., '0,1,2')",
+        help="Comma-separated list of episode IDs to evaluate (e.g., '0,1,2'); must exist in --data_split",
     )
     parser.add_argument(
         "--exclude_splits",
@@ -162,26 +171,34 @@ def find_chunk_indices(
     timestep_interval: int,
     chunk_size: int = CHUNK_SIZE,
 ) -> list[int] | None:
-    """Find dataset indices for non-overlapping chunks of an episode.
+    """Find dataset indices for consecutive non-overlapping chunks of an episode.
 
-    Chunks start at base_index 0, stride, 2*stride, ...
-    where stride = chunk_size * timestep_interval.
+    Chunks start at ``start``, ``start + stride``, ``start + 2 * stride``, ... where
+    ``stride = chunk_size * timestep_interval``. ``start`` is the episode's lowest
+    available base index, which is not always 0: CMR Versius clutch filtering drops
+    samples whose action horizon contains an arm swap or is fully disengaged, and that
+    routinely removes the opening frames of an episode.
 
-    Returns None if the episode doesn't have base_index=0.
+    Returns None if the episode has no samples in this split.
     """
     if episode_id not in episode_map:
-        logger.warning(f"Episode {episode_id} not found in episode_map")
+        available = sorted(episode_map)
+        logger.warning(
+            f"Episode {episode_id} has no samples in this split. "
+            f"Available episode IDs ({len(available)}): {available[:20]}{'...' if len(available) > 20 else ''}. "
+            f"Use --data_split full to evaluate episodes outside the held-out tail."
+        )
         return None
 
     entries = episode_map[episode_id]
     base_index_to_dataset_idx = {base_idx: ds_idx for ds_idx, base_idx in entries}
 
-    if 0 not in base_index_to_dataset_idx:
-        return None
-
     stride = chunk_size * timestep_interval
+    base_index = min(base_index_to_dataset_idx)
+    if base_index != 0:
+        logger.info(f"Episode {episode_id}: starting at base_index {base_index} (earlier samples filtered out)")
+
     chunk_indices = []
-    base_index = 0
     while base_index in base_index_to_dataset_idx:
         chunk_indices.append(base_index_to_dataset_idx[base_index])
         base_index += stride
@@ -294,7 +311,7 @@ def main():
             chunk_indices = find_chunk_indices(episode_map, episode_id, timestep_interval)
 
             if chunk_indices is None:
-                logger.warning(f"Episode {episode_id} doesn't start at base_index=0 in this split, skipping")
+                logger.warning(f"Skipping episode {episode_id}")
                 continue
 
             if len(chunk_indices) == 0:

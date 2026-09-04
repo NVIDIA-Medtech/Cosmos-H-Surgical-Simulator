@@ -9,7 +9,8 @@ For the generic action-conditioned pipeline (Bridge dataset), see the [Action-Co
 
 1. [Setup Guide](setup.md) — environment and dependencies
 2. [HuggingFace authentication](setup.md#downloading-checkpoints) — required for checkpoint downloads
-3. Configure training output directory:
+3. Datasets carrying the metadata their embodiment requires under `meta/` — see [Dataset metadata requirements](inference_surgical.md#dataset-metadata-requirements). Training reads the same normalization statistics, modality layout and CMR clutch filter cache as inference, and fails at startup if any are absent. The released Open-H datasets ship them; custom data needs them generated once with the scripts listed there.
+4. Configure training output directory:
 
 ```bash
 export IMAGINAIRE_OUTPUT_ROOT=/path/to/output

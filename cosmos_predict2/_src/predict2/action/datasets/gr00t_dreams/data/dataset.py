@@ -320,6 +320,12 @@ class LeRobotSingleDataset(Dataset):
         else:
             self._excluded_episode_ids = set()
 
+        # Modality metadata is loaded and checked first: it is cheap, and a modality file
+        # that cannot describe the configured keys must not surface only after statistics
+        # and the (large) CMR filter cache have been read.
+        self._lerobot_modality_meta = self._get_lerobot_modality_meta()
+        self._check_integrity()
+
         self._metadata = self._get_metadata(EmbodimentTag(self.tag))
         self._trajectory_ids, self._trajectory_lengths = self._get_trajectories()
         self._all_steps = self._get_all_steps(single_base_index=single_base_index)
@@ -331,7 +337,6 @@ class LeRobotSingleDataset(Dataset):
         print(f"Initialized dataset {self.dataset_name} with {embodiment_tag}")
 
         # LeRobot-specific config
-        self._lerobot_modality_meta = self._get_lerobot_modality_meta()
         self._lerobot_info_meta = self._get_lerobot_info_meta()
         self._data_path_pattern = self._get_data_path_pattern()
         self._video_path_pattern = self._get_video_path_pattern()
@@ -339,9 +344,6 @@ class LeRobotSingleDataset(Dataset):
         self._tasks = self._get_tasks()
         self.curr_traj_data = None
         self.curr_traj_id = None
-
-        # Check if the dataset is valid
-        self._check_integrity()
 
     @property
     def dataset_path(self) -> Path:
@@ -584,8 +586,20 @@ class LeRobotSingleDataset(Dataset):
                 print(f"{_get_rank_prefix()}NOTE: CMR Versius using stats_cosmos-44D.json: {stats_path}")
             else:
                 raise FileNotFoundError(
-                    f"CMR Versius requires stats_cosmos-44D.json but not found at: {cosmos_stats_path}\n"
-                    f"Run 'python scripts/compute_cmr_action_stats.py --dataset-path {self.dataset_path}' to generate it."
+                    f"\n{'=' * 80}\n"
+                    f"MISSING CMR VERSIUS 44D STATISTICS\n"
+                    f"{'=' * 80}\n"
+                    f"Dataset:  {self.dataset_path}\n"
+                    f"Expected: {cosmos_stats_path}\n\n"
+                    f"The released CMR Versius datasets ship this file under meta/. If it is\n"
+                    f"missing, re-download the dataset's meta/ directory.\n\n"
+                    f"The older meta/stats_cosmos.json (22D) and meta/stats_cosmos-28D.json (28D)\n"
+                    f"files are NOT usable here: they predate the 44D conditioning layout and\n"
+                    f"would silently normalize the wrong dimensions.\n\n"
+                    f"For a custom CMR dataset, compute the statistics once:\n"
+                    f"    PYTHONPATH=. python scripts/compute_cmr_action_stats.py \\\n"
+                    f"        --dataset-path {self.dataset_path}\n"
+                    f"{'=' * 80}\n"
                 )
         elif self.tag in self._get_open_h_tags():
             # Open-H embodiments REQUIRE stats_cosmos.json because
@@ -787,24 +801,20 @@ class LeRobotSingleDataset(Dataset):
     def _get_all_steps_cmr_filtered(self) -> list[tuple[int, int]]:
         """Get all valid steps for CMR Versius data with clutch-aware filtering.
 
-        This method loads PRE-COMPUTED filter cache from disk. The cache must be
-        generated BEFORE training using:
-            python scripts/compute_cmr_filtered_episodes_cache.py
+        This method loads a PRE-COMPUTED filter cache from the dataset's meta/ directory;
+        see ``_resolve_cmr_filter_cache`` for how a cache is selected and validated. The
+        released CMR Versius datasets ship these caches. For a custom dataset, generate one
+        with ``scripts/compute_cmr_filtered_episodes_cache.py``.
 
-        The cache file is stored in the dataset's meta/ directory with a hash based
-        on action_delta_indices to ensure consistency when hyperparameters change.
-
-        IMPORTANT: This method will FAIL if the cache file doesn't exist. This is
-        intentional to avoid expensive computation during distributed training startup.
+        Filtering is never computed here, on purpose: it reads every episode's parquet and
+        would run once per rank at distributed training startup.
 
         Returns:
             list[tuple[int, int]]: Filtered list of (trajectory_id, base_index) tuples.
 
         Raises:
-            FileNotFoundError: If the pre-computed cache file doesn't exist.
-            ValueError: If the cache file is invalid or has mismatched action_delta_indices.
+            FileNotFoundError: If no valid cache exists for this configuration.
         """
-        import hashlib
         import time
 
         rank = _get_rank_prefix()
@@ -826,66 +836,120 @@ class LeRobotSingleDataset(Dataset):
             f"{rank}[CMR Filter] Using action delta indices: {action_delta_indices[:5]}{'...' if len(action_delta_indices) > 5 else ''} (len={len(action_delta_indices)})"
         )
 
-        # Generate cache key based on action_delta_indices (primary factor affecting filtering)
-        # Include dataset name and split for uniqueness across different dataset configurations
-        cache_key_data = f"{self._dataset_name}_{self.data_split}_{sorted(action_delta_indices)}"
-        cache_hash = hashlib.md5(cache_key_data.encode()).hexdigest()[:12]
-        cache_filename = f"cmr_filter_cache_{self.data_split}_{cache_hash}-44D.json"
-        cache_path = self.dataset_path / "meta" / cache_filename
-
-        # Load pre-computed cache (MUST exist - no fallback computation)
-        if not cache_path.exists():
-            raise FileNotFoundError(
-                f"\n{'=' * 80}\n"
-                f"CMR VERSIUS FILTER CACHE NOT FOUND\n"
-                f"{'=' * 80}\n"
-                f"Expected cache file: {cache_path}\n\n"
-                f"The CMR clutch-aware filter cache must be pre-computed BEFORE training.\n"
-                f"This is required to avoid expensive computation during distributed training startup.\n\n"
-                f"To generate the cache, run:\n"
-                f"    python scripts/compute_cmr_filtered_episodes_cache.py \\\n"
-                f"        --dataset-path {self.dataset_path} \\\n"
-                f"        --split {self.data_split} \\\n"
-                f"        --num-frames {len(action_delta_indices)}\n\n"
-                f"Or to generate caches for all default CMR datasets:\n"
-                f"    python scripts/compute_cmr_filtered_episodes_cache.py\n"
-                f"{'=' * 80}\n"
-            )
-
-        print(f"{rank}[CMR Filter] Loading pre-computed cache from: {cache_path}")
-        with open(cache_path, "r") as f:
-            cache_data = json.load(f)
-
-        # Verify cache is valid (same action_delta_indices)
-        cached_indices = cache_data.get("action_delta_indices", [])
-        if cached_indices != action_delta_indices:
-            raise ValueError(
-                f"\n{'=' * 80}\n"
-                f"CMR VERSIUS FILTER CACHE INVALID\n"
-                f"{'=' * 80}\n"
-                f"Cache file: {cache_path}\n\n"
-                f"The cached action_delta_indices don't match the current configuration:\n"
-                f"  Cached:  {cached_indices[:5]}{'...' if len(cached_indices) > 5 else ''} (len={len(cached_indices)})\n"
-                f"  Current: {action_delta_indices[:5]}{'...' if len(action_delta_indices) > 5 else ''} (len={len(action_delta_indices)})\n\n"
-                f"This can happen if num_frames or timestep_interval changed.\n"
-                f"Please regenerate the cache:\n"
-                f"    python scripts/compute_cmr_filtered_episodes_cache.py \\\n"
-                f"        --dataset-path {self.dataset_path} \\\n"
-                f"        --split {self.data_split} \\\n"
-                f"        --num-frames {len(action_delta_indices)} \\\n"
-                f"        --force\n"
-                f"{'=' * 80}\n"
-            )
+        cache_path, cache_data = self._resolve_cmr_filter_cache(action_delta_indices)
 
         # Extract all_steps from cache
         all_steps = [(int(ep), int(idx)) for ep, idx in cache_data["all_steps"]]
         cached_stats = cache_data.get("stats", {})
 
         elapsed_time = time.time() - start_time
-        print(f"{rank}[CMR Filter] Loaded {len(all_steps):,} valid samples from cache in {elapsed_time:.2f}s")
+        print(
+            f"{rank}[CMR Filter] Loaded {len(all_steps):,} valid samples from {cache_path.name} in {elapsed_time:.2f}s"
+        )
         print(f"{rank}[CMR Filter] Cache stats: {cached_stats}")
 
         return all_steps
+
+    def _resolve_cmr_filter_cache(self, action_delta_indices: list[int]) -> tuple[Path, dict]:
+        """Locate and load a CMR clutch filter cache that is valid for this configuration.
+
+        The canonical filename embeds an md5 of ``(dataset directory name, split,
+        action delta indices)``, so a cache stays tied to the directory it was computed in
+        even though its contents only depend on the action horizon and the episode data.
+        Released datasets therefore ship caches whose names do not reproduce locally: they
+        were computed under the source directory names used during training.
+
+        Resolution order:
+          1. the canonical filename for this dataset directory, split, and action horizon;
+          2. any other ``meta/cmr_filter_cache_*.json`` whose recorded ``action_delta_indices``
+             match this configuration and whose episodes exist in this dataset.
+
+        The filtering rules (arm-swap and full-disengagement) depend only on the raw
+        ``observation.state`` columns and the action horizon, so a cache that passes the
+        validation in step 2 is equivalent to a locally recomputed one. Split names in
+        cache filenames are cosmetic: caches always cover every episode, and the
+        train/test partition is applied afterwards by ``WrappedLeRobotSingleDataset``.
+
+        Args:
+            action_delta_indices: Action delta indices from the active modality config.
+
+        Returns:
+            Tuple of (path of the cache that was used, parsed cache contents).
+
+        Raises:
+            FileNotFoundError: If no cache file in ``meta/`` is valid for this configuration.
+        """
+        import hashlib
+
+        rank = _get_rank_prefix()
+        meta_dir = self.dataset_path / "meta"
+
+        cache_key_data = f"{self._dataset_name}_{self.data_split}_{sorted(action_delta_indices)}"
+        cache_hash = hashlib.md5(cache_key_data.encode()).hexdigest()[:12]
+        expected_path = meta_dir / f"cmr_filter_cache_{self.data_split}_{cache_hash}-44D.json"
+
+        candidates = [expected_path] if expected_path.exists() else []
+        candidates += sorted(p for p in meta_dir.glob("cmr_filter_cache_*.json") if p != expected_path)
+
+        episode_ids = {int(i) for i in self.trajectory_ids}
+        rejected: list[str] = []
+        for candidate in candidates:
+            try:
+                with open(candidate, "r") as f:
+                    cache_data = json.load(f)
+            except (OSError, json.JSONDecodeError) as e:
+                rejected.append(f"{candidate.name}: unreadable ({e})")
+                continue
+
+            cached_indices = cache_data.get("action_delta_indices", [])
+            if cached_indices != action_delta_indices:
+                rejected.append(
+                    f"{candidate.name}: action horizon mismatch "
+                    f"(cached len={len(cached_indices)}, required len={len(action_delta_indices)})"
+                )
+                continue
+
+            steps = cache_data.get("all_steps")
+            if not steps:
+                rejected.append(f"{candidate.name}: no cached samples")
+                continue
+
+            unknown = {int(ep) for ep, _ in steps} - episode_ids
+            if unknown:
+                rejected.append(
+                    f"{candidate.name}: covers {len(unknown)} episode(s) absent from this dataset "
+                    f"(e.g. {sorted(unknown)[:5]})"
+                )
+                continue
+
+            if candidate != expected_path:
+                print(
+                    f"{rank}[CMR Filter] Canonical cache {expected_path.name} not present; "
+                    f"reusing {candidate.name}, which was validated against this configuration "
+                    f"(same action horizon, episodes all present)."
+                )
+            print(f"{rank}[CMR Filter] Loading pre-computed cache from: {candidate}")
+            return candidate, cache_data
+
+        detail = "\n".join(f"    - {r}" for r in rejected) if rejected else "    (no cache files in meta/)"
+        raise FileNotFoundError(
+            f"\n{'=' * 80}\n"
+            f"NO USABLE CMR VERSIUS FILTER CACHE\n"
+            f"{'=' * 80}\n"
+            f"Dataset:   {self.dataset_path}\n"
+            f"Split:     {self.data_split}\n"
+            f"Expected:  {expected_path.name}\n\n"
+            f"Cache files that were examined and rejected:\n{detail}\n\n"
+            f"The released CMR Versius datasets ship these caches under meta/. If they are\n"
+            f"missing, the dataset download is incomplete (they are Git LFS files, so verify\n"
+            f"they are real JSON and not LFS pointer stubs).\n\n"
+            f"For a custom CMR dataset, pre-compute the cache once:\n"
+            f"    PYTHONPATH=. python scripts/compute_cmr_filtered_episodes_cache.py \\\n"
+            f"        --dataset-path {self.dataset_path} \\\n"
+            f"        --split {self.data_split} \\\n"
+            f"        --num-frames {len(action_delta_indices) + 1}\n"
+            f"{'=' * 80}\n"
+        )
 
     def _get_modality_keys(self) -> dict:
         """Get the modality keys for the dataset.
@@ -959,7 +1023,18 @@ class LeRobotSingleDataset(Dataset):
                 try:
                     self.lerobot_modality_meta.get_key_meta(key)
                 except Exception as e:
-                    raise ValueError(ERROR_MSG_HEADER + f"Unable to find key {key} in modality metadata:\n{e}")
+                    hint = ""
+                    if self._modality_filename == LE_ROBOT_DEFAULT_MODALITY_FILENAME and key.startswith(
+                        ("action.cond_", "action.clutchBtn")
+                    ):
+                        hint = (
+                            f"\n\nThis dataset was read with {LE_ROBOT_DEFAULT_MODALITY_FILENAME}, which does not "
+                            f"describe the CMR Versius 44D conditioning keys. The 44D configuration requires "
+                            f"{LE_ROBOT_CMR_MODALITY_FILENAME}; the released CMR Versius datasets ship it under "
+                            f"meta/. The older meta/modality-28D.json is not a substitute — it lacks the clutch "
+                            f"button and the 14 cond_* conditioning keys."
+                        )
+                    raise ValueError(ERROR_MSG_HEADER + f"Unable to find key {key} in modality metadata:\n{e}{hint}")
 
     @staticmethod
     def _get_open_h_tags() -> frozenset[str]:

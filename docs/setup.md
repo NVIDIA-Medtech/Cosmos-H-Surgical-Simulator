@@ -29,7 +29,7 @@ git lfs install
 Clone the repository:
 
 ```bash
-git clone git@github.com:nvidia-cosmos/Cosmos-H-Surgical-Simulator.git
+git clone https://github.com/NVIDIA-Medtech/Cosmos-H-Surgical-Simulator.git
 cd Cosmos-H-Surgical-Simulator
 git lfs pull
 ```
