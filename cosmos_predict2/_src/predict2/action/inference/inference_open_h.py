@@ -39,7 +39,7 @@ episodes by their dataset-wide index (for example --episode_ids 0,1,2); the log 
 Usage:
     # CMR Versius (same as before, just with --embodiment flag):
     CUDA_VISIBLE_DEVICES=0 PYTHONPATH=. python cosmos_predict2/_src/predict2/action/inference/inference_open_h.py \\
-        --experiment cosmos_predict2p5_2B_action_conditioned_open_h_13frame_8nodes_release_oss \\
+        --experiment cosmos_predict2p5_2B_action_conditioned_open_h-fixed_13frame_8nodes_release_oss \\
         --ckpt_path /path/to/checkpoint/model_ema_bf16.pt \\
         --dataset_path /path/to/Open-H/Surgical/cmr_surgical/cholecystectomy \\
         --embodiment cmr_versius \\
@@ -48,7 +48,7 @@ Usage:
 
     # dVRK JHU (monocular):
     CUDA_VISIBLE_DEVICES=0 PYTHONPATH=. python cosmos_predict2/_src/predict2/action/inference/inference_open_h.py \\
-        --experiment cosmos_predict2p5_2B_action_conditioned_open_h_13frame_8nodes_release_oss \\
+        --experiment cosmos_predict2p5_2B_action_conditioned_open_h-fixed_13frame_8nodes_release_oss \\
         --ckpt_path /path/to/checkpoint/model_ema_bf16.pt \\
         --dataset_path /path/to/jhu/suturebot_2 \\
         --embodiment jhu_dvrk_mono \\
@@ -56,7 +56,7 @@ Usage:
 
     # Stanford Real (with exclude_splits):
     CUDA_VISIBLE_DEVICES=0 PYTHONPATH=. python cosmos_predict2/_src/predict2/action/inference/inference_open_h.py \\
-        --experiment cosmos_predict2p5_2B_action_conditioned_open_h_13frame_8nodes_release_oss \\
+        --experiment cosmos_predict2p5_2B_action_conditioned_open_h-fixed_13frame_8nodes_release_oss \\
         --ckpt_path /path/to/checkpoint/model_ema_bf16.pt \\
         --dataset_path /path/to/stanford/Needle_Transfer \\
         --embodiment dvrk_stanford_real \\

@@ -31,11 +31,11 @@ Uses LeRobotDataset directly to ensure actions are transformed identically to tr
 
 Usage:
     CUDA_VISIBLE_DEVICES=0 PYTHONPATH=. python cosmos_predict2/_src/predict2/action/inference/inference_cmr.py \
-        --experiment=cosmos_predict2p5_2B_action_conditioned_cmr_13frame_4nodes_release_oss \
+        --experiment=cosmos_predict2p5_2B_action_conditioned_cmr_13frame_44D_8nodes_release_oss \
         --ckpt_path /path/to/checkpoint/model_ema_bf16.pt \
-        --dataset_path /CMR_Versius/cholecystectomy_480p \
-        --save_root results/cmr_eval/cholecystectomy_480p \
-        --data_split test \
+        --dataset_path /path/to/Open-H/Surgical/cmr_surgical/cholecystectomy \
+        --save_root results/cmr_eval/cholecystectomy \
+        --data_split full \
         --episode_ids 0,1,2
 """
 
