@@ -30,6 +30,12 @@ dataset_gr00t_g1_warmup = L(ActionDatasetSFWarmup)(
     cr1_embeddings_path="cr1_empty_string_text_embeddings.pt",
 )
 
+# Long-horizon Phase 0 cache used by the reference tabletop warmup and SF stages.
+dataset_jhu_dvrk_mono_warmup_h73 = L(ActionDatasetSFWarmup)(
+    data_path="datasets/jhu_dvrk_mono_warmup_4step_h73_tabletop",
+    cr1_embeddings_path="cr1_empty_string_text_embeddings.pt",
+)
+
 # ----------- Dataloaders -----------
 
 
@@ -70,6 +76,12 @@ def register_interactive_data():
         node=make_dataloader(dataset_gr00t_g1_warmup),
     )
     cs.store(
+        group="data_train",
+        package="dataloader_train",
+        name="jhu_dvrk_mono_warmup_h73",
+        node=make_dataloader(dataset_jhu_dvrk_mono_warmup_h73),
+    )
+    cs.store(
         group="data_val",
         package="dataloader_val",
         name="gr00t_gr1_warmup",
@@ -80,4 +92,10 @@ def register_interactive_data():
         package="dataloader_val",
         name="gr00t_g1_warmup",
         node=make_dataloader(dataset_gr00t_g1_warmup),
+    )
+    cs.store(
+        group="data_val",
+        package="dataloader_val",
+        name="jhu_dvrk_mono_warmup_h73",
+        node=make_dataloader(dataset_jhu_dvrk_mono_warmup_h73),
     )

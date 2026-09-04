@@ -13,10 +13,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
+
 from hydra.core.config_store import ConfigStore
 
 from cosmos_predict2._src.imaginaire.lazy_config import LazyDict
-from cosmos_predict2._src.predict2.distill.utils.config_helper import build_no_s3_run, deep_update_config_dict
+from cosmos_predict2._src.predict2.distill.utils.config_helper import (
+    build_no_s3_run,
+    build_no_s3_run_v2,
+    deep_update_config_dict,
+)
+
+_TABLETOP_OUTPUT_ROOT = os.environ.get("IMAGINAIRE_OUTPUT_ROOT", "imaginaire/output")
+_JHU_H13_FINE_ANNEAL_CHECKPOINT = (
+    f"{_TABLETOP_OUTPUT_ROOT}/cosmos_predict2_action_conditioned/official_runs_vid2vid/"
+    "cosmos_predict2p5_2B_action_conditioned_jhu_dvrk_mono_finetune_13frame_"
+    "8nodes_release_oss_fine_anneal_4k/checkpoints/iter_000004000"
+)
 
 
 def make_experiment(
@@ -146,6 +159,24 @@ ACTION_GR00T_WARMUP_G1 = make_experiment(
     ),
 )
 
+ACTION_JHU_DVRK_MONO_TABLETOP_H73_WARMUP = make_experiment(
+    name="jhu_dvrk_mono_i4_lr3e-5_h73_tabletop",
+    data="jhu_dvrk_mono_warmup_h73",
+    overrides=dict(
+        checkpoint=dict(load_path=_JHU_H13_FINE_ANNEAL_CHECKPOINT),
+        model=dict(
+            config=dict(
+                state_t=1 + 72 // 4,
+                net=dict(action_dim=44),
+                resolution="288",
+            ),
+        ),
+        optimizer=dict(lr=3e-5),
+        dataloader_train=dict(batch_size=2),
+        trainer=dict(max_iter=20000),
+    ),
+)
+
 """
 torchrun --nproc_per_node=1 --master_port=12341 -m scripts.train --config=cosmos_predict2/_src/predict2/interactive/configs/config_warmup.py -- experiment=cosmos_predict2p5_2B_action_gr00t_gr1_warmup
 """
@@ -169,4 +200,16 @@ cs.store(
     package="_global_",
     name="cosmos_predict2p5_2B_action_gr00t_gr1_warmup_no_s3",
     node=build_no_s3_run(ACTION_GR00T_WARMUP_GR1),
+)
+cs.store(
+    group="experiment",
+    package="_global_",
+    name="cosmos_predict2p5_2B_action_jhu_dvrk_mono_tabletop_h73_warmup_no_s3_resumable",
+    node=build_no_s3_run_v2(
+        ACTION_JHU_DVRK_MONO_TABLETOP_H73_WARMUP,
+        local_path=True,
+        resumable=True,
+        load_training_state=False,
+        wandb_mode="offline",
+    ),
 )
