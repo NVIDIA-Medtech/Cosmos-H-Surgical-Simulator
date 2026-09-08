@@ -119,7 +119,7 @@ source "$HOME/.local/bin/env"
 uv sync --extra=cu128
 source .venv/bin/activate
 
-uv tool install -U "huggingface_hub[cli]"
+uv tool install -U huggingface_hub
 hf auth login
 
 export IMAGINAIRE_OUTPUT_ROOT=/persistent/path/imaginaire/output

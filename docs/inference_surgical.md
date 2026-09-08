@@ -31,20 +31,31 @@ DS=nvidia/PhysicalAI-Robotics-Open-H-Embodiment
 P=Surgical/cmr_surgical/cholecystectomy
 hf download $DS --repo-type dataset --local-dir datasets/Open-H \
   --include "$P/meta/info.json" \
-            "$P/meta/episodes.jsonl" \
-            "$P/meta/tasks.jsonl" \
-            "$P/meta/modality-44D.json" \
-            "$P/meta/stats_cosmos-44D.json" \
-            "$P/meta/cmr_filter_cache_test_*-28D.json" \
-            "$P/data/chunk-000/episode_00000[0-2].parquet" \
-            "$P/videos/chunk-000/observation.images.endoscope/episode_00000[0-2].mp4"
+  --include "$P/meta/episodes.jsonl" \
+  --include "$P/meta/tasks.jsonl" \
+  --include "$P/meta/modality-44D.json" \
+  --include "$P/meta/stats_cosmos-44D.json" \
+  --include "$P/meta/cmr_filter_cache_test_*-28D.json" \
+  --include "$P/data/chunk-000/episode_00000[0-2].parquet" \
+  --include "$P/videos/chunk-000/observation.images.endoscope/episode_00000[0-2].mp4"
 ```
 
 Those six files are everything the loader reads, so prefer them over `--include "$P/meta/*"`. Each procedure publishes more than one filter cache, at 200-450 MB apiece, and the loader needs only one; the pattern above selects exactly one for every CMR procedure. The wildcard `meta/*` would also fetch `meta/episodes_stats.jsonl`, which is 30-66 MB and is never read by this pipeline.
 
+Pass each pattern with its own `--include`. Hugging Face CLI 1.x treats additional values
+after one `--include` as positional filenames and ignores the include pattern. Because
+filtering happens after the multi-TB repository tree is listed, this command may show no
+progress for several minutes before the transfer starts.
+
 Episode indices are dataset-wide and come from `meta/episodes.jsonl`, not from the files on disk, so a partial download still resolves the shipped filter cache correctly. `--episode_ids` selects among the episodes whose files you downloaded, and only those episodes are read at generation time.
 
 For a different procedure, substitute `hysterectomy`, `inguinal_hernia` or `prostatectomy` for `cholecystectomy`; each ships its own `stats_cosmos-44D.json` and its own cache.
+
+On a cold machine, model construction also downloads the two Cosmos-Predict2.5-2B base
+checkpoints, one Cosmos-Predict2.5-14B base checkpoint, and the Wan2.1 VAE. These
+auxiliary assets total about 37.5 GB in addition to the 4.3 GB surgical checkpoint and
+the selected dataset files. Allow about 60 GB of free space and set `HF_HOME` to the
+desired cache volume before the first run.
 
 ## Dataset metadata requirements
 

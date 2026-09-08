@@ -86,7 +86,7 @@ uv sync --extra=cu128
 source .venv/bin/activate
 
 # Configure Hugging Face for checkpoint downloads
-uv tool install -U "huggingface_hub[cli]"
+uv tool install -U huggingface_hub
 hf auth login
 ```
 

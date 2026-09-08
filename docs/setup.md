@@ -106,7 +106,7 @@ sudo systemctl restart docker
 ## Downloading Checkpoints
 
 1. Get a [Hugging Face Access Token](https://huggingface.co/settings/tokens) with `Read` permission
-2. Install [Hugging Face CLI](https://huggingface.co/docs/huggingface_hub/en/guides/cli): `uv tool install -U "huggingface_hub[cli]"`
+2. Install [Hugging Face CLI](https://huggingface.co/docs/huggingface_hub/en/guides/cli): `uv tool install -U huggingface_hub`
 3. Login: `hf auth login`
 4. Accept the [NVIDIA Open Model License Agreement](https://huggingface.co/nvidia/Cosmos-H-Surgical-Simulator) on the model page.
 
