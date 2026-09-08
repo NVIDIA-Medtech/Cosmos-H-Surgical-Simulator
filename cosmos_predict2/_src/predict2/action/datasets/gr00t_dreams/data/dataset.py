@@ -130,47 +130,6 @@ LE_ROBOT_TASKS_FILENAME = "meta/tasks.jsonl"
 LE_ROBOT_STATS_FILENAME = "meta/stats.json"
 LE_ROBOT_DATA_FILENAME = "data/*/*.parquet"
 
-# Published caches created before episode-length fingerprints were added. Each entry
-# attests both the exact cache bytes (the Hub LFS SHA-256) and the episode-length
-# fingerprint it was generated against. Unlisted legacy caches must be regenerated.
-CMR_RELEASED_LEGACY_CACHE_BINDINGS = {
-    "cmr_filter_cache_test_80d526196daa-28D.json": (
-        "3066b587aa460f89f37aa3c8c27d8ec47723971d4d7cc4439bf56a6f06b0048d",
-        "b4da53ea2f07f83cb4426c83714a84081ade3e95f360108950d64e3e5d215841",
-    ),
-    "cmr_filter_cache_train_e8215f8e4ce0-28D.json": (
-        "702c1e4a17b71eedf55478032a07fbaf5f74ef64620cb85c4c9f66b78a262825",
-        "b4da53ea2f07f83cb4426c83714a84081ade3e95f360108950d64e3e5d215841",
-    ),
-    "cmr_filter_cache_test_198577f08952-28D.json": (
-        "c063ff28e15b89d919a8d62452ad182bea469b5fe8ee98a26d5e45fb43e9131b",
-        "40584af3b0905b718e0d13cd4abcf15b3581ed7e031494149d68b63c26a504ea",
-    ),
-    "cmr_filter_cache_train_aa48a0815cee-28D.json": (
-        "ef593a131302e58221a67198e167c24d3be3d785f897ad9710656a0be261d39c",
-        "40584af3b0905b718e0d13cd4abcf15b3581ed7e031494149d68b63c26a504ea",
-    ),
-    "cmr_filter_cache_test_494daca2f2c6-28D.json": (
-        "a3f0687e38e55d641dde2dfb7f81c13bef3202256a7c3826da63e261a71cc2d0",
-        "7cfe7c44a2f12056ff0d88f89f6e3a94da249c8a02046aabf2cf74e5e10c527b",
-    ),
-    "cmr_filter_cache_test_494daca2f2c6.json": (
-        "da8479e7a2c05ae362fd4256eae051745586e63663b02d2bacc73e43e8ddcc43",
-        "7cfe7c44a2f12056ff0d88f89f6e3a94da249c8a02046aabf2cf74e5e10c527b",
-    ),
-    "cmr_filter_cache_train_3f9856ef6a19-28D.json": (
-        "718cb6311213af2f1040ee0c99f3a3b3862029e998d2be7fb02122c5a2296d9d",
-        "7cfe7c44a2f12056ff0d88f89f6e3a94da249c8a02046aabf2cf74e5e10c527b",
-    ),
-}
-
-# These published caches predate 51 episodes in the current inguinal-hernia metadata.
-# They must be replaced with schema-v2 caches rather than silently omitting those episodes.
-CMR_KNOWN_STALE_LEGACY_CACHES = {
-    "cmr_filter_cache_test_d0b3e81306e0-28D.json",
-    "cmr_filter_cache_train_7d9fea801831-28D.json",
-}
-
 # Shared AgiBot-World metadata on the cluster the model was trained on. AgiBot datasets
 # that carry no meta/ files of their own were loaded through these. The directory does not
 # exist elsewhere; when it is absent the dataset's own meta/ files are used instead.
@@ -184,15 +143,6 @@ def _episode_lengths_sha256(trajectory_ids, trajectory_lengths) -> str:
         raise ValueError("Duplicate episode IDs found in meta/episodes.jsonl")
     payload = json.dumps(pairs, separators=(",", ":")).encode()
     return hashlib.sha256(payload).hexdigest()
-
-
-def _file_sha256(path: Path) -> str:
-    """Compute a file SHA-256 without loading a large cache twice into memory."""
-    digest = hashlib.sha256()
-    with open(path, "rb") as f:
-        for chunk in iter(lambda: f.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def _get_rank_prefix() -> str:
@@ -990,14 +940,15 @@ class LeRobotSingleDataset(Dataset):
         Resolution order:
           1. the canonical filename for this dataset directory, split, and action horizon;
           2. any other ``meta/cmr_filter_cache_*.json`` whose recorded ``action_delta_indices``
-             and episode-length fingerprint match this dataset.
+             match this configuration.
 
         The filtering rules (arm-swap and full-disengagement) depend only on the raw
-        ``observation.state`` columns and the action horizon, so a cache that passes the
-        validation in step 2 is bound to the episode metadata it was computed from.
-        Recognized pre-fingerprint release caches are additionally verified by their Hub
-        checksum. Split names in cache filenames are cosmetic: caches always cover every
-        episode, and the train/test partition is applied afterwards by
+        ``observation.state`` columns and the action horizon. Schema-v2 caches are bound
+        to the complete episode ID-to-length mapping. Existing release caches predate that
+        fingerprint, so they remain compatible after every cached step is checked against
+        the current episode lengths; unsafe legacy entries are discarded and reported,
+        and the loader warns that completeness cannot be proven. Split names in cache
+        filenames are cosmetic: the train/test partition is applied afterwards by
         ``WrappedLeRobotSingleDataset``.
 
         Args:
@@ -1052,6 +1003,7 @@ class LeRobotSingleDataset(Dataset):
                 continue
 
             cached_fingerprint = cache_data.get("episode_lengths_sha256")
+            is_legacy_cache = cached_fingerprint is None
             if cached_fingerprint is not None:
                 schema_version = cache_data.get("cache_schema_version")
                 if (
@@ -1074,56 +1026,42 @@ class LeRobotSingleDataset(Dataset):
                         f"(cached={cache_data.get('episode_count')!r}, current={len(episode_lengths)})"
                     )
                     continue
-            else:
-                legacy_binding = CMR_RELEASED_LEGACY_CACHE_BINDINGS.get(candidate.name)
-                if legacy_binding is None:
-                    if candidate.name in CMR_KNOWN_STALE_LEGACY_CACHES:
-                        rejected.append(
-                            f"{candidate.name}: known stale released cache; it predates episodes in the "
-                            f"current inguinal-hernia metadata and must be regenerated"
-                        )
-                        continue
-                    rejected.append(
-                        f"{candidate.name}: legacy cache has no episode-length fingerprint and is not a "
-                        f"recognized released cache; regenerate it with the current generator"
-                    )
-                    continue
-                expected_cache_sha256, bound_episode_fingerprint = legacy_binding
-                if bound_episode_fingerprint != episode_lengths_fingerprint:
-                    rejected.append(
-                        f"{candidate.name}: released legacy cache is bound to different episode lengths "
-                        f"(cached={bound_episode_fingerprint[:12]}, current={episode_lengths_fingerprint[:12]})"
-                    )
-                    continue
-                actual_cache_sha256 = _file_sha256(candidate)
-                if actual_cache_sha256 != expected_cache_sha256:
-                    rejected.append(
-                        f"{candidate.name}: released legacy cache checksum mismatch "
-                        f"(cached={expected_cache_sha256[:12]}, actual={actual_cache_sha256[:12]})"
-                    )
-                    continue
 
             cached_stats = cache_data.get("stats", {})
-            expected_stats = {
+            if not isinstance(cached_stats, dict):
+                rejected.append(f"{candidate.name}: malformed cache summary")
+                continue
+            if cached_stats.get("valid_samples") != len(steps):
+                rejected.append(
+                    f"{candidate.name}: valid_samples={cached_stats.get('valid_samples')!r} "
+                    f"but cache contains {len(steps)} steps"
+                )
+                continue
+
+            expected_metadata_stats = {
                 "raw_frames": expected_raw_frames,
                 "effective_samples": expected_effective_samples,
-                "valid_samples": len(steps),
             }
-            mismatched_stats = [
+            metadata_stat_mismatches = [
                 f"{key}={cached_stats.get(key)!r} (expected {expected_value})"
-                for key, expected_value in expected_stats.items()
+                for key, expected_value in expected_metadata_stats.items()
                 if cached_stats.get(key) != expected_value
             ]
-            if mismatched_stats:
+            if metadata_stat_mismatches and not is_legacy_cache:
                 rejected.append(
                     f"{candidate.name}: cache summary does not match current episode lengths: "
-                    f"{', '.join(mismatched_stats)}"
+                    f"{', '.join(metadata_stat_mismatches)}"
                 )
                 continue
 
             normalized_steps: list[tuple[int, int]] = []
             invalid_step = None
-            previous_step = None
+            previous_raw_step = None
+            dropped_legacy_steps = {
+                "absent_episode": 0,
+                "out_of_bounds": 0,
+                "duplicate": 0,
+            }
             for position, step in enumerate(steps):
                 if not isinstance(step, (list, tuple)) or len(step) != 2:
                     invalid_step = f"entry {position} is not an (episode_id, base_index) pair"
@@ -1137,35 +1075,71 @@ class LeRobotSingleDataset(Dataset):
                     invalid_step = f"entry {position} contains non-integer values: {step!r}"
                     break
                 episode_id, base_index = step
+                normalized_step = (episode_id, base_index)
+                if previous_raw_step is not None and normalized_step <= previous_raw_step:
+                    if is_legacy_cache and normalized_step == previous_raw_step:
+                        dropped_legacy_steps["duplicate"] += 1
+                        continue
+                    invalid_step = f"entry {position} is out of order: {normalized_step} after {previous_raw_step}"
+                    break
+                previous_raw_step = normalized_step
+
                 episode_length = episode_lengths.get(episode_id)
                 if episode_length is None:
+                    if is_legacy_cache:
+                        dropped_legacy_steps["absent_episode"] += 1
+                        continue
                     invalid_step = f"entry {position} references absent episode {episode_id}"
                     break
                 effective_length = max(0, episode_length - max_delta)
                 if base_index < 0 or base_index >= effective_length:
+                    if is_legacy_cache:
+                        dropped_legacy_steps["out_of_bounds"] += 1
+                        continue
                     invalid_step = (
                         f"entry {position} has out-of-range base index {base_index} for episode "
                         f"{episode_id} (valid range: 0..{effective_length - 1})"
                     )
                     break
-                normalized_step = (episode_id, base_index)
-                if previous_step is not None and normalized_step <= previous_step:
-                    invalid_step = (
-                        f"entry {position} is duplicate or out of order: {normalized_step} after {previous_step}"
-                    )
-                    break
                 normalized_steps.append(normalized_step)
-                previous_step = normalized_step
             if invalid_step is not None:
                 rejected.append(f"{candidate.name}: invalid cached samples: {invalid_step}")
                 continue
+            if not normalized_steps:
+                rejected.append(f"{candidate.name}: no safe cached samples remain after validation")
+                continue
 
             cache_data["all_steps"] = normalized_steps
+            if is_legacy_cache:
+                dropped_total = sum(dropped_legacy_steps.values())
+                warning = (
+                    f"{rank}[CMR Filter] WARNING: Reusing legacy cache {candidate.name}, which has no "
+                    f"episode-length fingerprint. {len(normalized_steps):,} cached steps are valid for "
+                    f"the current metadata, but cache completeness cannot be proven."
+                )
+                if dropped_total:
+                    cache_data["stats"] = dict(cached_stats)
+                    cache_data["stats"]["dropped_unsafe_legacy_samples"] = dropped_total
+                    warning += (
+                        f" Discarded {dropped_total:,} unsafe entries "
+                        f"(absent episode={dropped_legacy_steps['absent_episode']:,}, "
+                        f"out of bounds={dropped_legacy_steps['out_of_bounds']:,}, "
+                        f"duplicate={dropped_legacy_steps['duplicate']:,})."
+                    )
+                if metadata_stat_mismatches:
+                    warning += f" Metadata summary mismatch: {', '.join(metadata_stat_mismatches)}."
+                warning += " Regenerate the cache to add strict fingerprint validation."
+                print(warning)
+
             if candidate != expected_path:
+                validation = (
+                    "same action horizon and episode-length fingerprint"
+                    if not is_legacy_cache
+                    else "same action horizon with every cached step in bounds"
+                )
                 print(
                     f"{rank}[CMR Filter] Canonical cache {expected_path.name} not present; "
-                    f"reusing {candidate.name}, which was validated against this configuration "
-                    f"(same action horizon and episode-length fingerprint)."
+                    f"reusing {candidate.name}, which was validated against this configuration ({validation})."
                 )
             print(f"{rank}[CMR Filter] Loading pre-computed cache from: {candidate}")
             return candidate, cache_data

@@ -33,8 +33,10 @@ The hash covers the dataset directory name, the split, and the action delta indi
 changed action horizon invalidates the cache. The contents, however, depend only on the
 episode data and the action horizon: every cache covers all episodes, and the train/test
 partition is applied afterwards by WrappedLeRobotSingleDataset. One cache therefore serves
-every split — the loader requires the cache's episode-length fingerprint to match before
-reusing a cache whose filename names a different split or directory.
+every split. New caches include an episode-length fingerprint for strict reuse validation.
+The loader also supports existing pre-fingerprint release caches by validating every
+cached step against current episode lengths, discarding unsafe legacy entries, and warning
+that completeness cannot be proven.
 
 Generation is strict: every episode declared in meta/episodes.jsonl must have a readable
 parquet file with the declared row count. Any failure aborts without writing a partial

@@ -79,7 +79,7 @@ Notes specific to CMR Versius:
 
 - The older `stats_cosmos.json` (22D) and `stats_cosmos-28D.json` (28D) files present in some CMR directories predate the 44D layout and are not interchangeable with `stats_cosmos-44D.json`. The same applies to `modality-28D.json`, which lacks the clutch and `cond_*` keys.
 - Filter caches are large Git LFS files. If loading fails, check that `git lfs pull` actually replaced them with JSON rather than pointer stubs.
-- A cache's filename encodes the directory name, split and action horizon it was computed under, but its contents depend only on the episode data and the action horizon. The loader validates candidates by content, so a cache generated for a different split or directory name is reused when it matches; no regeneration is needed just because the name differs.
+- A cache's filename encodes the directory name, split and action horizon it was computed under, but its contents depend only on the episode data and the action horizon. The loader validates candidates by content, so a cache generated for a different split or directory name is reused when it matches; no regeneration is needed just because the name differs. New caches carry an episode-length fingerprint. Existing release caches remain compatible after every cached step is checked against the current episode lengths; unsafe legacy entries are discarded and a warning explains that completeness cannot be proven for the legacy format.
 - Both generator scripts are only needed for custom CMR data, a different action horizon, or a different frame stride. Statistics and filtering read the parquet action/state columns only, so they are independent of the video resolution of a dataset variant.
 
 ## Multi-Embodiment Inference (Open-H)
