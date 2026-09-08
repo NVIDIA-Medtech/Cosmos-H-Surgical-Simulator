@@ -84,7 +84,7 @@ Aggregated results (JSON + log report)
 1. Add an `EmbodimentTag` entry in [`embodiment_tags.py`] with a docstring describing the action space
 2. Add the embodiment to `EMBODIMENT_REGISTRY` in [`groot_configs.py`] with action keys, video keys, state keys, and normalization config
 3. Add dataset entries to `OPEN_H_DATASET_SPECS` with mix ratios and any split exclusions
-4. Pre-compute normalization stats and save as `meta/stats_cosmos.json` in the LeRobot dataset directory
+4. Pre-compute normalization stats with `scripts/compute_openh_action_stats.py` and save as `meta/stats_cosmos.json` in the LeRobot dataset directory (CMR Versius instead uses `meta/stats_cosmos-44D.json` from `scripts/compute_cmr_action_stats.py`, plus `meta/modality-44D.json` and a clutch filter cache from `scripts/compute_cmr_filtered_episodes_cache.py` — see [Dataset metadata requirements](inference_surgical.md#dataset-metadata-requirements))
 5. Test with `inference_open_h.py --embodiment your_new_tag`
 
 See [README_ACTION_SPACE.md](../scripts/README_ACTION_SPACE.md) for the full action vector layout and per-embodiment mapping details.

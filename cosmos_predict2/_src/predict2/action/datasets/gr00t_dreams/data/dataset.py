@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import hashlib
 import json
 from collections import defaultdict
 from pathlib import Path
@@ -128,6 +129,20 @@ def resolve_excluded_episode_indices(
 LE_ROBOT_TASKS_FILENAME = "meta/tasks.jsonl"
 LE_ROBOT_STATS_FILENAME = "meta/stats.json"
 LE_ROBOT_DATA_FILENAME = "data/*/*.parquet"
+
+# Shared AgiBot-World metadata on the cluster the model was trained on. AgiBot datasets
+# that carry no meta/ files of their own were loaded through these. The directory does not
+# exist elsewhere; when it is absent the dataset's own meta/ files are used instead.
+AGIBOT_SHARED_META_DIR = Path("/mnt/amlfs-03/shared/datasets/agibot-beta-converted-0512/agibotworld")
+
+
+def _episode_lengths_sha256(trajectory_ids, trajectory_lengths) -> str:
+    """Hash the complete episode ID-to-length mapping in a stable representation."""
+    pairs = sorted((int(episode_id), int(length)) for episode_id, length in zip(trajectory_ids, trajectory_lengths))
+    if len({episode_id for episode_id, _ in pairs}) != len(pairs):
+        raise ValueError("Duplicate episode IDs found in meta/episodes.jsonl")
+    payload = json.dumps(pairs, separators=(",", ":")).encode()
+    return hashlib.sha256(payload).hexdigest()
 
 
 def _get_rank_prefix() -> str:
@@ -281,8 +296,8 @@ class LeRobotSingleDataset(Dataset):
             transforms (ComposedModalityTransform): The transforms to apply to the dataset.
             embodiment_tag (EmbodimentTag): Overload the embodiment tag for the dataset. e.g. define it as "new_embodiment"
             modality_filename (str | None): Path to the modality metadata JSON file relative to
-                dataset_path. If None, auto-detects: tries CMR-specific file first for CMR_VERSIUS,
-                then falls back to the standard modality.json.
+                dataset_path. If None, CMR Versius uses modality-44D.json and every other
+                embodiment uses modality.json.
             exclude_splits (list[str] | None): Split names from info.json to exclude
                 (e.g., ["fail", "bad_frames"]). Episodes in these splits are filtered out.
         """
@@ -298,20 +313,22 @@ class LeRobotSingleDataset(Dataset):
         self._dataset_path = Path(dataset_path)
         self._dataset_name = self._dataset_path.name
 
-        # Resolve modality filename: explicit > CMR-specific > default
+        if isinstance(embodiment_tag, EmbodimentTag):
+            self.tag = embodiment_tag.value
+        else:
+            self.tag = embodiment_tag
+
+        # Resolve modality filename from the model contract, not from file existence. In
+        # particular, a missing CMR 44D file must not silently select legacy modality.json.
         if modality_filename is not None:
             self._modality_filename = modality_filename
-        elif (self._dataset_path / LE_ROBOT_CMR_MODALITY_FILENAME).exists():
+        elif self.tag == EmbodimentTag.CMR_VERSIUS.value:
             self._modality_filename = LE_ROBOT_CMR_MODALITY_FILENAME
         else:
             self._modality_filename = LE_ROBOT_DEFAULT_MODALITY_FILENAME
         # Default data_split for base class (can be overridden by subclasses like WrappedLeRobotSingleDataset)
         if not hasattr(self, "data_split"):
             self.data_split = "full"
-        if isinstance(embodiment_tag, EmbodimentTag):
-            self.tag = embodiment_tag.value
-        else:
-            self.tag = embodiment_tag
 
         # Resolve excluded episode indices from info.json splits
         self._exclude_splits = exclude_splits
@@ -319,6 +336,12 @@ class LeRobotSingleDataset(Dataset):
             self._excluded_episode_ids: set[int] = resolve_excluded_episode_indices(self._dataset_path, exclude_splits)
         else:
             self._excluded_episode_ids = set()
+
+        # Modality metadata is loaded and checked first: it is cheap, and a modality file
+        # that cannot describe the configured keys must not surface only after statistics
+        # and the (large) CMR filter cache have been read.
+        self._lerobot_modality_meta = self._get_lerobot_modality_meta()
+        self._check_integrity()
 
         self._metadata = self._get_metadata(EmbodimentTag(self.tag))
         self._trajectory_ids, self._trajectory_lengths = self._get_trajectories()
@@ -331,7 +354,6 @@ class LeRobotSingleDataset(Dataset):
         print(f"Initialized dataset {self.dataset_name} with {embodiment_tag}")
 
         # LeRobot-specific config
-        self._lerobot_modality_meta = self._get_lerobot_modality_meta()
         self._lerobot_info_meta = self._get_lerobot_info_meta()
         self._data_path_pattern = self._get_data_path_pattern()
         self._video_path_pattern = self._get_video_path_pattern()
@@ -339,9 +361,6 @@ class LeRobotSingleDataset(Dataset):
         self._tasks = self._get_tasks()
         self.curr_traj_data = None
         self.curr_traj_id = None
-
-        # Check if the dataset is valid
-        self._check_integrity()
 
     @property
     def dataset_path(self) -> Path:
@@ -434,6 +453,69 @@ class LeRobotSingleDataset(Dataset):
         """The tasks for the dataset."""
         return self._tasks
 
+    def _resolve_modality_meta_path(self) -> Path:
+        """Locate the modality metadata describing this dataset's state/action layout.
+
+        AgiBot falls back to its shared training copy when that directory is reachable.
+
+        Returns:
+            Path of the modality metadata file to read.
+
+        Raises:
+            FileNotFoundError: If the dataset has no modality metadata and no fallback
+                is reachable.
+        """
+        modality_meta_path = self.dataset_path / self._modality_filename
+        if modality_meta_path.exists():
+            return modality_meta_path
+
+        agibot_fallback = AGIBOT_SHARED_META_DIR / "modality.json"
+        if self.tag == EmbodimentTag.AGIBOT.value and agibot_fallback.exists():
+            print(
+                f"WARNING: {self._modality_filename} not found in {self.dataset_path}; "
+                f"falling back to {agibot_fallback}"
+            )
+            return agibot_fallback
+
+        cmr_hint = (
+            f"\nCMR Versius reads {LE_ROBOT_CMR_MODALITY_FILENAME}, which is a different file\n"
+            f"from the {LE_ROBOT_DEFAULT_MODALITY_FILENAME} used by the other embodiments. A dataset\n"
+            f"copy that predates the 44D release carries the latter but not the former.\n"
+            if self._modality_filename == LE_ROBOT_CMR_MODALITY_FILENAME
+            else ""
+        )
+        raise FileNotFoundError(
+            f"\n{'=' * 80}\n"
+            f"MISSING MODALITY METADATA\n"
+            f"{'=' * 80}\n"
+            f"Dataset:  {self.dataset_path}\n"
+            f"Expected: {modality_meta_path}\n\n"
+            f"This file declares the state and action layout of the dataset and must sit in\n"
+            f"the dataset's meta/ directory. The released datasets ship it, so if it is\n"
+            f"missing the download is incomplete.\n"
+            f"{cmr_hint}"
+            f"{'=' * 80}\n"
+        )
+
+    def _require_dataset_metadata(self, filename: str, purpose: str) -> Path:
+        """Return a required metadata path or raise an actionable missing-file error."""
+        path = self.dataset_path / filename
+        if path.exists():
+            return path
+
+        raise FileNotFoundError(
+            f"\n{'=' * 80}\n"
+            f"MISSING REQUIRED DATASET METADATA\n"
+            f"{'=' * 80}\n"
+            f"Dataset:  {self.dataset_path}\n"
+            f"Expected: {path}\n"
+            f"Purpose:  {purpose}\n\n"
+            f"If this is a released Open-H dataset, the download is incomplete. Re-download\n"
+            f"this file from the dataset's meta/ directory. For a custom LeRobot dataset,\n"
+            f"provide the file before constructing the dataset.\n"
+            f"{'=' * 80}\n"
+        )
+
     def _get_metadata(self, embodiment_tag: EmbodimentTag) -> DatasetMetadata:
         """Get the metadata for the dataset.
 
@@ -442,15 +524,7 @@ class LeRobotSingleDataset(Dataset):
         """
 
         # 1. Modality metadata
-        modality_meta_path = self.dataset_path / self._modality_filename
-        if not (modality_meta_path.exists()):
-            modality_meta_path = Path(
-                "/mnt/amlfs-03/shared/datasets/agibot-beta-converted-0512/agibotworld/modality.json"
-            )
-            print(
-                "WARNING: Could not find modality.json in dataset path, falling back to /mnt/amlfs-03/shared/datasets/agibot-beta-converted-0512/agibotworld/modality.json"
-            )
-        assert modality_meta_path.exists(), f"Please provide a {self._modality_filename} file in {self.dataset_path}"
+        modality_meta_path = self._resolve_modality_meta_path()
 
         # 1.1. State and action modalities
         simplified_modality_meta: dict[str, dict] = {}
@@ -473,8 +547,10 @@ class LeRobotSingleDataset(Dataset):
                 }
 
         # 1.2. Video modalities
-        le_info_path = self.dataset_path / LE_ROBOT_INFO_FILENAME
-        assert le_info_path.exists(), f"Please provide a {LE_ROBOT_INFO_FILENAME} file in {self.dataset_path}"
+        le_info_path = self._require_dataset_metadata(
+            LE_ROBOT_INFO_FILENAME,
+            "declares dataset features, video paths, frame rate, and chunk size",
+        )
         with open(le_info_path, "r") as f:
             le_info = json.load(f)
         simplified_modality_meta["video"] = {}
@@ -570,11 +646,12 @@ class LeRobotSingleDataset(Dataset):
         #   - CMR: scripts/compute_cmr_action_stats.py  → stats_cosmos-44D.json
         #   - Others: scripts/compute_openh_action_stats.py → stats_cosmos.json
         stats_path = self.dataset_path / LE_ROBOT_STATS_FILENAME
-        if "agibot" in str(stats_path):
-            print(
-                "NOTE: Using standard action normalization at /mnt/amlfs-03/shared/datasets/agibot-beta-converted-0512/agibotworld/stats.json"
-            )
-            stats_path = Path("/mnt/amlfs-03/shared/datasets/agibot-beta-converted-0512/agibotworld/stats.json")
+        agibot_shared_stats = AGIBOT_SHARED_META_DIR / "stats.json"
+        if "agibot" in str(stats_path) and agibot_shared_stats.exists():
+            # AgiBot datasets were normalized against one shared stats file during training.
+            # Where that file is unreachable, the dataset's own meta/stats.json is used.
+            print(f"NOTE: Using the shared AgiBot-World action normalization at {agibot_shared_stats}")
+            stats_path = agibot_shared_stats
         elif embodiment_tag == EmbodimentTag.CMR_VERSIUS:
             # CMR Versius uses stats_cosmos-44D.json with hybrid-relative action statistics
             # (generated by scripts/compute_cmr_action_stats.py)
@@ -584,8 +661,20 @@ class LeRobotSingleDataset(Dataset):
                 print(f"{_get_rank_prefix()}NOTE: CMR Versius using stats_cosmos-44D.json: {stats_path}")
             else:
                 raise FileNotFoundError(
-                    f"CMR Versius requires stats_cosmos-44D.json but not found at: {cosmos_stats_path}\n"
-                    f"Run 'python scripts/compute_cmr_action_stats.py --dataset-path {self.dataset_path}' to generate it."
+                    f"\n{'=' * 80}\n"
+                    f"MISSING CMR VERSIUS 44D STATISTICS\n"
+                    f"{'=' * 80}\n"
+                    f"Dataset:  {self.dataset_path}\n"
+                    f"Expected: {cosmos_stats_path}\n\n"
+                    f"The released CMR Versius datasets ship this file under meta/. If it is\n"
+                    f"missing, re-download the dataset's meta/ directory.\n\n"
+                    f"The older meta/stats_cosmos.json (22D) and meta/stats_cosmos-28D.json (28D)\n"
+                    f"files are NOT usable here: they predate the 44D conditioning layout and\n"
+                    f"would silently normalize the wrong dimensions.\n\n"
+                    f"For a custom CMR dataset, compute the statistics once:\n"
+                    f"    PYTHONPATH=. python scripts/compute_cmr_action_stats.py \\\n"
+                    f"        --dataset-path {self.dataset_path}\n"
+                    f"{'=' * 80}\n"
                 )
         elif self.tag in self._get_open_h_tags():
             # Open-H embodiments REQUIRE stats_cosmos.json because
@@ -699,7 +788,10 @@ class LeRobotSingleDataset(Dataset):
     def _get_trajectories(self) -> tuple[np.ndarray, np.ndarray]:
         """Get the trajectories in the dataset."""
         # Get trajectory lengths, IDs, and whitelist from dataset metadata
-        episode_path = self.dataset_path / LE_ROBOT_EPISODE_FILENAME
+        episode_path = self._require_dataset_metadata(
+            LE_ROBOT_EPISODE_FILENAME,
+            "declares every episode index and length",
+        )
         with open(episode_path, "r") as f:
             episode_metadata = [json.loads(line) for line in f]
         trajectory_ids = []
@@ -787,24 +879,20 @@ class LeRobotSingleDataset(Dataset):
     def _get_all_steps_cmr_filtered(self) -> list[tuple[int, int]]:
         """Get all valid steps for CMR Versius data with clutch-aware filtering.
 
-        This method loads PRE-COMPUTED filter cache from disk. The cache must be
-        generated BEFORE training using:
-            python scripts/compute_cmr_filtered_episodes_cache.py
+        This method loads a PRE-COMPUTED filter cache from the dataset's meta/ directory;
+        see ``_resolve_cmr_filter_cache`` for how a cache is selected and validated. The
+        released CMR Versius datasets ship these caches. For a custom dataset, generate one
+        with ``scripts/compute_cmr_filtered_episodes_cache.py``.
 
-        The cache file is stored in the dataset's meta/ directory with a hash based
-        on action_delta_indices to ensure consistency when hyperparameters change.
-
-        IMPORTANT: This method will FAIL if the cache file doesn't exist. This is
-        intentional to avoid expensive computation during distributed training startup.
+        Filtering is never computed here, on purpose: it reads every episode's parquet and
+        would run once per rank at distributed training startup.
 
         Returns:
             list[tuple[int, int]]: Filtered list of (trajectory_id, base_index) tuples.
 
         Raises:
-            FileNotFoundError: If the pre-computed cache file doesn't exist.
-            ValueError: If the cache file is invalid or has mismatched action_delta_indices.
+            FileNotFoundError: If no valid cache exists for this configuration.
         """
-        import hashlib
         import time
 
         rank = _get_rank_prefix()
@@ -826,66 +914,255 @@ class LeRobotSingleDataset(Dataset):
             f"{rank}[CMR Filter] Using action delta indices: {action_delta_indices[:5]}{'...' if len(action_delta_indices) > 5 else ''} (len={len(action_delta_indices)})"
         )
 
-        # Generate cache key based on action_delta_indices (primary factor affecting filtering)
-        # Include dataset name and split for uniqueness across different dataset configurations
-        cache_key_data = f"{self._dataset_name}_{self.data_split}_{sorted(action_delta_indices)}"
-        cache_hash = hashlib.md5(cache_key_data.encode()).hexdigest()[:12]
-        cache_filename = f"cmr_filter_cache_{self.data_split}_{cache_hash}-44D.json"
-        cache_path = self.dataset_path / "meta" / cache_filename
-
-        # Load pre-computed cache (MUST exist - no fallback computation)
-        if not cache_path.exists():
-            raise FileNotFoundError(
-                f"\n{'=' * 80}\n"
-                f"CMR VERSIUS FILTER CACHE NOT FOUND\n"
-                f"{'=' * 80}\n"
-                f"Expected cache file: {cache_path}\n\n"
-                f"The CMR clutch-aware filter cache must be pre-computed BEFORE training.\n"
-                f"This is required to avoid expensive computation during distributed training startup.\n\n"
-                f"To generate the cache, run:\n"
-                f"    python scripts/compute_cmr_filtered_episodes_cache.py \\\n"
-                f"        --dataset-path {self.dataset_path} \\\n"
-                f"        --split {self.data_split} \\\n"
-                f"        --num-frames {len(action_delta_indices)}\n\n"
-                f"Or to generate caches for all default CMR datasets:\n"
-                f"    python scripts/compute_cmr_filtered_episodes_cache.py\n"
-                f"{'=' * 80}\n"
-            )
-
-        print(f"{rank}[CMR Filter] Loading pre-computed cache from: {cache_path}")
-        with open(cache_path, "r") as f:
-            cache_data = json.load(f)
-
-        # Verify cache is valid (same action_delta_indices)
-        cached_indices = cache_data.get("action_delta_indices", [])
-        if cached_indices != action_delta_indices:
-            raise ValueError(
-                f"\n{'=' * 80}\n"
-                f"CMR VERSIUS FILTER CACHE INVALID\n"
-                f"{'=' * 80}\n"
-                f"Cache file: {cache_path}\n\n"
-                f"The cached action_delta_indices don't match the current configuration:\n"
-                f"  Cached:  {cached_indices[:5]}{'...' if len(cached_indices) > 5 else ''} (len={len(cached_indices)})\n"
-                f"  Current: {action_delta_indices[:5]}{'...' if len(action_delta_indices) > 5 else ''} (len={len(action_delta_indices)})\n\n"
-                f"This can happen if num_frames or timestep_interval changed.\n"
-                f"Please regenerate the cache:\n"
-                f"    python scripts/compute_cmr_filtered_episodes_cache.py \\\n"
-                f"        --dataset-path {self.dataset_path} \\\n"
-                f"        --split {self.data_split} \\\n"
-                f"        --num-frames {len(action_delta_indices)} \\\n"
-                f"        --force\n"
-                f"{'=' * 80}\n"
-            )
+        cache_path, cache_data = self._resolve_cmr_filter_cache(action_delta_indices)
 
         # Extract all_steps from cache
         all_steps = [(int(ep), int(idx)) for ep, idx in cache_data["all_steps"]]
         cached_stats = cache_data.get("stats", {})
 
         elapsed_time = time.time() - start_time
-        print(f"{rank}[CMR Filter] Loaded {len(all_steps):,} valid samples from cache in {elapsed_time:.2f}s")
+        print(
+            f"{rank}[CMR Filter] Loaded {len(all_steps):,} valid samples from {cache_path.name} in {elapsed_time:.2f}s"
+        )
         print(f"{rank}[CMR Filter] Cache stats: {cached_stats}")
 
         return all_steps
+
+    def _resolve_cmr_filter_cache(self, action_delta_indices: list[int]) -> tuple[Path, dict]:
+        """Locate and load a CMR clutch filter cache that is valid for this configuration.
+
+        The canonical filename embeds an md5 of ``(dataset directory name, split,
+        action delta indices)``, so a cache stays tied to the directory it was computed in
+        even though its contents only depend on the action horizon and the episode data.
+        Released datasets therefore ship caches whose names do not reproduce locally: they
+        were computed under the source directory names used during training.
+
+        Resolution order:
+          1. the canonical filename for this dataset directory, split, and action horizon;
+          2. any other ``meta/cmr_filter_cache_*.json`` whose recorded ``action_delta_indices``
+             match this configuration.
+
+        The filtering rules (arm-swap and full-disengagement) depend only on the raw
+        ``observation.state`` columns and the action horizon. Schema-v2 caches are bound
+        to the complete episode ID-to-length mapping. Existing release caches predate that
+        fingerprint, so they remain compatible after every cached step is checked against
+        the current episode lengths; unsafe legacy entries are discarded and reported,
+        and the loader warns that completeness cannot be proven. Split names in cache
+        filenames are cosmetic: the train/test partition is applied afterwards by
+        ``WrappedLeRobotSingleDataset``.
+
+        Args:
+            action_delta_indices: Action delta indices from the active modality config.
+
+        Returns:
+            Tuple of (path of the cache that was used, parsed cache contents).
+
+        Raises:
+            FileNotFoundError: If no cache file in ``meta/`` is valid for this configuration.
+        """
+        rank = _get_rank_prefix()
+        meta_dir = self.dataset_path / "meta"
+
+        cache_key_data = f"{self._dataset_name}_{self.data_split}_{sorted(action_delta_indices)}"
+        cache_hash = hashlib.md5(cache_key_data.encode()).hexdigest()[:12]
+        expected_path = meta_dir / f"cmr_filter_cache_{self.data_split}_{cache_hash}-44D.json"
+
+        candidates = [expected_path] if expected_path.exists() else []
+        candidates += sorted(p for p in meta_dir.glob("cmr_filter_cache_*.json") if p != expected_path)
+
+        episode_lengths = {
+            int(episode_id): int(length) for episode_id, length in zip(self.trajectory_ids, self.trajectory_lengths)
+        }
+        if len(episode_lengths) != len(self.trajectory_ids):
+            raise ValueError(f"Duplicate episode IDs found in {self.dataset_path / LE_ROBOT_EPISODE_FILENAME}")
+        episode_lengths_fingerprint = _episode_lengths_sha256(self.trajectory_ids, self.trajectory_lengths)
+        max_delta = max(action_delta_indices) if action_delta_indices else 0
+        expected_raw_frames = sum(episode_lengths.values())
+        expected_effective_samples = sum(max(0, length - max_delta) for length in episode_lengths.values())
+
+        rejected: list[str] = []
+        for candidate in candidates:
+            try:
+                with open(candidate, "r") as f:
+                    cache_data = json.load(f)
+            except (OSError, json.JSONDecodeError) as e:
+                rejected.append(f"{candidate.name}: unreadable ({e})")
+                continue
+
+            cached_indices = cache_data.get("action_delta_indices", [])
+            if cached_indices != action_delta_indices:
+                rejected.append(
+                    f"{candidate.name}: action horizon mismatch "
+                    f"(cached len={len(cached_indices)}, required len={len(action_delta_indices)})"
+                )
+                continue
+
+            steps = cache_data.get("all_steps")
+            if not steps:
+                rejected.append(f"{candidate.name}: no cached samples")
+                continue
+
+            cached_fingerprint = cache_data.get("episode_lengths_sha256")
+            is_legacy_cache = cached_fingerprint is None
+            if cached_fingerprint is not None:
+                schema_version = cache_data.get("cache_schema_version")
+                if (
+                    not isinstance(schema_version, int)
+                    or schema_version < 2
+                    or not isinstance(cached_fingerprint, str)
+                    or len(cached_fingerprint) != 64
+                ):
+                    rejected.append(f"{candidate.name}: malformed schema-v2 episode-length fingerprint")
+                    continue
+                if cached_fingerprint != episode_lengths_fingerprint:
+                    rejected.append(
+                        f"{candidate.name}: episode-length fingerprint mismatch "
+                        f"(cached={cached_fingerprint[:12]}, current={episode_lengths_fingerprint[:12]})"
+                    )
+                    continue
+                if cache_data.get("episode_count") != len(episode_lengths):
+                    rejected.append(
+                        f"{candidate.name}: episode count mismatch "
+                        f"(cached={cache_data.get('episode_count')!r}, current={len(episode_lengths)})"
+                    )
+                    continue
+
+            cached_stats = cache_data.get("stats", {})
+            if not isinstance(cached_stats, dict):
+                rejected.append(f"{candidate.name}: malformed cache summary")
+                continue
+            if cached_stats.get("valid_samples") != len(steps):
+                rejected.append(
+                    f"{candidate.name}: valid_samples={cached_stats.get('valid_samples')!r} "
+                    f"but cache contains {len(steps)} steps"
+                )
+                continue
+
+            expected_metadata_stats = {
+                "raw_frames": expected_raw_frames,
+                "effective_samples": expected_effective_samples,
+            }
+            metadata_stat_mismatches = [
+                f"{key}={cached_stats.get(key)!r} (expected {expected_value})"
+                for key, expected_value in expected_metadata_stats.items()
+                if cached_stats.get(key) != expected_value
+            ]
+            if metadata_stat_mismatches and not is_legacy_cache:
+                rejected.append(
+                    f"{candidate.name}: cache summary does not match current episode lengths: "
+                    f"{', '.join(metadata_stat_mismatches)}"
+                )
+                continue
+
+            normalized_steps: list[tuple[int, int]] = []
+            invalid_step = None
+            previous_raw_step = None
+            dropped_legacy_steps = {
+                "absent_episode": 0,
+                "out_of_bounds": 0,
+                "duplicate": 0,
+            }
+            for position, step in enumerate(steps):
+                if not isinstance(step, (list, tuple)) or len(step) != 2:
+                    invalid_step = f"entry {position} is not an (episode_id, base_index) pair"
+                    break
+                if (
+                    not isinstance(step[0], int)
+                    or isinstance(step[0], bool)
+                    or not isinstance(step[1], int)
+                    or isinstance(step[1], bool)
+                ):
+                    invalid_step = f"entry {position} contains non-integer values: {step!r}"
+                    break
+                episode_id, base_index = step
+                normalized_step = (episode_id, base_index)
+                if previous_raw_step is not None and normalized_step <= previous_raw_step:
+                    if is_legacy_cache and normalized_step == previous_raw_step:
+                        dropped_legacy_steps["duplicate"] += 1
+                        continue
+                    invalid_step = f"entry {position} is out of order: {normalized_step} after {previous_raw_step}"
+                    break
+                previous_raw_step = normalized_step
+
+                episode_length = episode_lengths.get(episode_id)
+                if episode_length is None:
+                    if is_legacy_cache:
+                        dropped_legacy_steps["absent_episode"] += 1
+                        continue
+                    invalid_step = f"entry {position} references absent episode {episode_id}"
+                    break
+                effective_length = max(0, episode_length - max_delta)
+                if base_index < 0 or base_index >= effective_length:
+                    if is_legacy_cache:
+                        dropped_legacy_steps["out_of_bounds"] += 1
+                        continue
+                    invalid_step = (
+                        f"entry {position} has out-of-range base index {base_index} for episode "
+                        f"{episode_id} (valid range: 0..{effective_length - 1})"
+                    )
+                    break
+                normalized_steps.append(normalized_step)
+            if invalid_step is not None:
+                rejected.append(f"{candidate.name}: invalid cached samples: {invalid_step}")
+                continue
+            if not normalized_steps:
+                rejected.append(f"{candidate.name}: no safe cached samples remain after validation")
+                continue
+
+            cache_data["all_steps"] = normalized_steps
+            if is_legacy_cache:
+                dropped_total = sum(dropped_legacy_steps.values())
+                warning = (
+                    f"{rank}[CMR Filter] WARNING: Reusing legacy cache {candidate.name}, which has no "
+                    f"episode-length fingerprint. {len(normalized_steps):,} cached steps are valid for "
+                    f"the current metadata, but cache completeness cannot be proven."
+                )
+                if dropped_total:
+                    cache_data["stats"] = dict(cached_stats)
+                    cache_data["stats"]["dropped_unsafe_legacy_samples"] = dropped_total
+                    warning += (
+                        f" Discarded {dropped_total:,} unsafe entries "
+                        f"(absent episode={dropped_legacy_steps['absent_episode']:,}, "
+                        f"out of bounds={dropped_legacy_steps['out_of_bounds']:,}, "
+                        f"duplicate={dropped_legacy_steps['duplicate']:,})."
+                    )
+                if metadata_stat_mismatches:
+                    warning += f" Metadata summary mismatch: {', '.join(metadata_stat_mismatches)}."
+                warning += " Regenerate the cache to add strict fingerprint validation."
+                print(warning)
+
+            if candidate != expected_path:
+                validation = (
+                    "same action horizon and episode-length fingerprint"
+                    if not is_legacy_cache
+                    else "same action horizon with every cached step in bounds"
+                )
+                print(
+                    f"{rank}[CMR Filter] Canonical cache {expected_path.name} not present; "
+                    f"reusing {candidate.name}, which was validated against this configuration ({validation})."
+                )
+            print(f"{rank}[CMR Filter] Loading pre-computed cache from: {candidate}")
+            return candidate, cache_data
+
+        detail = "\n".join(f"    - {r}" for r in rejected) if rejected else "    (no cache files in meta/)"
+        raise FileNotFoundError(
+            f"\n{'=' * 80}\n"
+            f"NO USABLE CMR VERSIUS FILTER CACHE\n"
+            f"{'=' * 80}\n"
+            f"Dataset:   {self.dataset_path}\n"
+            f"Split:     {self.data_split}\n"
+            f"Expected:  {expected_path.name}\n\n"
+            f"Cache files that were examined and rejected:\n{detail}\n\n"
+            f"The released CMR Versius datasets ship these caches under meta/. If they are\n"
+            f"missing, the dataset download is incomplete (they are Git LFS files, so verify\n"
+            f"they are real JSON and not LFS pointer stubs).\n\n"
+            f"For a custom CMR dataset, pre-compute the cache once:\n"
+            f"    PYTHONPATH=. python scripts/compute_cmr_filtered_episodes_cache.py \\\n"
+            f"        --dataset-path {self.dataset_path} \\\n"
+            f"        --split {self.data_split} \\\n"
+            f"        --num-frames {len(action_delta_indices) + 1}\n"
+            f"{'=' * 80}\n"
+        )
 
     def _get_modality_keys(self) -> dict:
         """Get the modality keys for the dataset.
@@ -907,22 +1184,17 @@ class LeRobotSingleDataset(Dataset):
 
     def _get_lerobot_modality_meta(self) -> LeRobotModalityMetadata:
         """Get the metadata for the LeRobot dataset."""
-        modality_meta_path = self.dataset_path / self._modality_filename
-        if not (modality_meta_path.exists()):
-            modality_meta_path = Path(
-                "/mnt/amlfs-03/shared/datasets/agibot-beta-converted-0512/agibotworld/modality.json"
-            )
-            print(
-                "WARNING: Could not find modality.json in dataset path, falling back to /mnt/amlfs-03/shared/datasets/agibot-beta-converted-0512/agibotworld/modality.json"
-            )
-        assert modality_meta_path.exists(), f"Please provide a {self._modality_filename} file in {self.dataset_path}"
+        modality_meta_path = self._resolve_modality_meta_path()
         with open(modality_meta_path, "r") as f:
             modality_meta = LeRobotModalityMetadata.model_validate(json.load(f))
         return modality_meta
 
     def _get_lerobot_info_meta(self) -> dict:
         """Get the metadata for the LeRobot dataset."""
-        info_meta_path = self.dataset_path / LE_ROBOT_INFO_FILENAME
+        info_meta_path = self._require_dataset_metadata(
+            LE_ROBOT_INFO_FILENAME,
+            "declares dataset features, video paths, frame rate, and chunk size",
+        )
         with open(info_meta_path, "r") as f:
             info_meta = json.load(f)
         return info_meta
@@ -941,7 +1213,10 @@ class LeRobotSingleDataset(Dataset):
 
     def _get_tasks(self) -> pd.DataFrame:
         """Get the tasks for the dataset."""
-        tasks_path = self.dataset_path / LE_ROBOT_TASKS_FILENAME
+        tasks_path = self._require_dataset_metadata(
+            LE_ROBOT_TASKS_FILENAME,
+            "maps task indices to the language instructions used for conditioning",
+        )
         with open(tasks_path, "r") as f:
             tasks = [json.loads(line) for line in f]
         df = pd.DataFrame(tasks)
@@ -959,7 +1234,18 @@ class LeRobotSingleDataset(Dataset):
                 try:
                     self.lerobot_modality_meta.get_key_meta(key)
                 except Exception as e:
-                    raise ValueError(ERROR_MSG_HEADER + f"Unable to find key {key} in modality metadata:\n{e}")
+                    hint = ""
+                    if self._modality_filename == LE_ROBOT_DEFAULT_MODALITY_FILENAME and key.startswith(
+                        ("action.cond_", "action.clutchBtn")
+                    ):
+                        hint = (
+                            f"\n\nThis dataset was read with {LE_ROBOT_DEFAULT_MODALITY_FILENAME}, which does not "
+                            f"describe the CMR Versius 44D conditioning keys. The 44D configuration requires "
+                            f"{LE_ROBOT_CMR_MODALITY_FILENAME}; the released CMR Versius datasets ship it under "
+                            f"meta/. The older meta/modality-28D.json is not a substitute — it lacks the clutch "
+                            f"button and the 14 cond_* conditioning keys."
+                        )
+                    raise ValueError(ERROR_MSG_HEADER + f"Unable to find key {key} in modality metadata:\n{e}{hint}")
 
     @staticmethod
     def _get_open_h_tags() -> frozenset[str]:
@@ -1497,7 +1783,10 @@ class WrappedLeRobotSingleDataset(LeRobotSingleDataset):
     def _get_trajectories(self) -> tuple[np.ndarray, np.ndarray]:
         """Get the trajectories in the dataset."""
         # Get trajectory lengths, IDs, and whitelist from dataset metadata
-        episode_path = self.dataset_path / LE_ROBOT_EPISODE_FILENAME
+        episode_path = self._require_dataset_metadata(
+            LE_ROBOT_EPISODE_FILENAME,
+            "declares every episode index and length",
+        )
         with open(episode_path, "r") as f:
             episode_metadata = [json.loads(line) for line in f]
         trajectory_ids = []

@@ -52,14 +52,14 @@ content-type = "text/markdown"
 text = '''
 # Cosmos-H-Surgical-Simulator
 
-[Documentation](https://github.com/nvidia-cosmos/Cosmos-H-Surgical-Simulator/blob/main/README.md)
+[Documentation](https://github.com/NVIDIA-Medtech/Cosmos-H-Surgical-Simulator/blob/main/README.md)
 '''
 
 [project.urls]
-documentation = "https://github.com/nvidia-cosmos/Cosmos-H-Surgical-Simulator/blob/main/README.md"
-homepage = "https://github.com/nvidia-cosmos/Cosmos-H-Surgical-Simulator"
-issues = "https://github.com/nvidia-cosmos/Cosmos-H-Surgical-Simulator/issues"
-repository = "https://github.com/nvidia-cosmos/Cosmos-H-Surgical-Simulator"
+documentation = "https://github.com/NVIDIA-Medtech/Cosmos-H-Surgical-Simulator/blob/main/README.md"
+homepage = "https://github.com/NVIDIA-Medtech/Cosmos-H-Surgical-Simulator"
+issues = "https://github.com/NVIDIA-Medtech/Cosmos-H-Surgical-Simulator/issues"
+repository = "https://github.com/NVIDIA-Medtech/Cosmos-H-Surgical-Simulator"
 
 [tool.uv]
 conflicts = [

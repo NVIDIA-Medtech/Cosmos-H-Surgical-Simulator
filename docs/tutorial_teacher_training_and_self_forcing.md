@@ -110,7 +110,7 @@ Examples are 13, 25, 49, and 73 frames.
 Follow [setup.md](setup.md), authenticate with Hugging Face, and download the C-H-S-S checkpoint.
 
 ```bash
-git clone https://github.com/nvidia-cosmos/Cosmos-H-Surgical-Simulator.git
+git clone https://github.com/NVIDIA-Medtech/Cosmos-H-Surgical-Simulator.git
 cd Cosmos-H-Surgical-Simulator
 git lfs pull
 
@@ -119,7 +119,7 @@ source "$HOME/.local/bin/env"
 uv sync --extra=cu128
 source .venv/bin/activate
 
-uv tool install -U "huggingface_hub[cli]"
+uv tool install -U huggingface_hub
 hf auth login
 
 export IMAGINAIRE_OUTPUT_ROOT=/persistent/path/imaginaire/output

@@ -1293,7 +1293,7 @@ def construct_modality_config_and_transforms(num_frames, embodiment, downscaled_
             "action.thumbstickBtn_right",
             "action.clutchBtn_left",
             "action.clutchBtn_right",
-            # === STATE CONDITIONING (12D) ===
+            # === STATE CONDITIONING (14D) ===
             "action.cond_hapticengaged_left",
             "action.cond_hapticengaged_right",
             "action.cond_armlinkedtohaptic_left",
@@ -1357,10 +1357,10 @@ def construct_modality_config_and_transforms(num_frames, embodiment, downscaled_
         # State keys to include in final output (excluding pass-through only keys)
         cmr_state_output_keys = [k for k in state_modality.modality_keys if k not in cmr_state_passthrough_keys]
 
-        # NOTE: Normalization uses stats_cosmos.json (not stats.json) for CMR Versius.
-        # Run scripts/compute_cmr_action_stats.py to generate stats_cosmos.json with
-        # correct statistics for the 9D hybrid-relative pose format.
-        # Stats loading is handled in dataset.py which checks for stats_cosmos.json first.
+        # NOTE: Normalization uses meta/stats_cosmos-44D.json (not stats.json) for CMR Versius,
+        # because these statistics describe the 9D hybrid-relative pose format produced below.
+        # The released CMR datasets ship the file; scripts/compute_cmr_action_stats.py regenerates
+        # it for custom data. Stats loading is handled in dataset.py.
 
         train_transform = ComposedModalityTransform(
             transforms=[
@@ -1394,13 +1394,13 @@ def construct_modality_config_and_transforms(num_frames, embodiment, downscaled_
                     action_passthrough_keys=cmr_action_passthrough_keys,
                     state_passthrough_keys=cmr_state_passthrough_keys,
                 ),
-                # State normalization (uses stats_cosmos.json) - AFTER CMRVersiusRelativeActionTransform
+                # State normalization (uses stats_cosmos-44D.json) - AFTER CMRVersiusRelativeActionTransform
                 # State poses remain as raw 7D (xyz + quat), normalized here for model input
                 StateActionTransform(
                     apply_to=cmr_state_output_keys,
                     normalization_modes={key: "mean_std" for key in cmr_state_output_keys},
                 ),
-                # Action normalization (uses stats_cosmos.json with 9D hybrid-relative pose stats)
+                # Action normalization (uses stats_cosmos-44D.json with 9D hybrid-relative pose stats)
                 StateActionTransform(
                     apply_to=cmr_action_output_keys,
                     normalization_modes={key: "mean_std" for key in cmr_action_output_keys},
@@ -1438,12 +1438,12 @@ def construct_modality_config_and_transforms(num_frames, embodiment, downscaled_
                     action_passthrough_keys=cmr_action_passthrough_keys,
                     state_passthrough_keys=cmr_state_passthrough_keys,
                 ),
-                # State normalization (uses stats_cosmos.json) - AFTER CMRVersiusRelativeActionTransform
+                # State normalization (uses stats_cosmos-44D.json) - AFTER CMRVersiusRelativeActionTransform
                 StateActionTransform(
                     apply_to=cmr_state_output_keys,
                     normalization_modes={key: "mean_std" for key in cmr_state_output_keys},
                 ),
-                # Action normalization (uses stats_cosmos.json with 9D hybrid-relative pose stats)
+                # Action normalization (uses stats_cosmos-44D.json with 9D hybrid-relative pose stats)
                 StateActionTransform(
                     apply_to=cmr_action_output_keys,
                     normalization_modes={key: "mean_std" for key in cmr_action_output_keys},

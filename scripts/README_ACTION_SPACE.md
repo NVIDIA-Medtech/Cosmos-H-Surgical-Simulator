@@ -2,7 +2,7 @@
 
 This document describes the design of the unified 44-dimensional action
 conditioning space used by the Cosmos Predict-2.5 world model when fine-tuned
-on the [Open-H](https://huggingface.co/datasets/nvidia/Open-H) multi-embodiment
+on the [Open-H](https://huggingface.co/datasets/nvidia/PhysicalAI-Robotics-Open-H-Embodiment) multi-embodiment
 surgical robotics benchmark.  It also details how non-CMR embodiments map their
 native action spaces into the shared 44D vector via zero-padding, and documents
 the data mixture that governs how each dataset contributes to training.
@@ -15,16 +15,19 @@ the data mixture that governs how each dataset contributes to training.
 2. [The 44D Action Vector](#the-44d-action-vector)
    - [CMR Versius Breakdown (Full 44D)](#cmr-versius-breakdown-full-44d)
    - [Action Representation Formats](#action-representation-formats)
-3. [Non-CMR Embodiment Mapping](#non-cmr-embodiment-mapping)
+3. [Coordinate Frame and Motion Scaling (CMR Versius)](#coordinate-frame-and-motion-scaling-cmr-versius)
+   - [Reference Frame](#reference-frame)
+   - [Motion Scaling Factors](#motion-scaling-factors)
+4. [Non-CMR Embodiment Mapping](#non-cmr-embodiment-mapping)
    - [Summary Table](#summary-table)
    - [Per-Embodiment Details](#per-embodiment-details)
-4. [Zero-Padding Mechanism](#zero-padding-mechanism)
-5. [Transform Pipeline](#transform-pipeline)
-6. [Data Mixture](#data-mixture)
+5. [Zero-Padding Mechanism](#zero-padding-mechanism)
+6. [Transform Pipeline](#transform-pipeline)
+7. [Data Mixture](#data-mixture)
    - [Weighting Strategy](#weighting-strategy)
    - [Full Dataset Specification](#full-dataset-specification)
    - [Training Statistics](#training-statistics)
-7. [Source Code Pointers](#source-code-pointers)
+8. [Source Code Pointers](#source-code-pointers)
 
 ---
 
@@ -123,6 +126,56 @@ The 6D rotation representation follows the **column convention** from
 *Zhou et al., "On the Continuity of Rotation Representations in Neural
 Networks"*: the first two columns of the 3x3 rotation matrix are flattened
 as `[r00, r10, r20, r01, r11, r21]`.
+
+---
+
+## Coordinate Frame and Motion Scaling (CMR Versius)
+
+The CMR Versius parquet columns hold **surgeon hand-controller** poses, not instrument
+tool-tip poses.  The `action` column carries `x/y/z` in metres and an `xyzw` quaternion per
+hand, plus the console's button and thumbstick inputs.  The instrument-tip representation
+described elsewhere in this document is *derived* from those hand-controller poses at
+training time; the dataset contains no separate tool-tip pose stream.
+
+### Reference Frame
+
+Per the CMR Versius dataset documentation accompanying the Open-H release, hand-controller
+poses are absolute Cartesian poses expressed in the **camera frame** — the endoscope carried
+by the visualisation arm — rather than in a robot base, tool or world frame.  The console
+maps the surgeon's hand movement into that frame, which is what keeps the surgeon's view and
+the endoscopic view registered to each other.
+
+The transform pipeline applies no rotation of its own, so that frame carries through to the
+model, with one asymmetry that matters when supplying actions at inference:
+
+| Component | Frame of the value the model consumes |
+|---|---|
+| Translation (3D) | Camera frame, relative to the pose at the window's first frame |
+| Rotation (6D) | `R_ref^T · R_t` — relative to the orientation at the window's first frame, and expressed in that reference orientation's own frame |
+
+Endoscope motion is not folded into the pose channels; it is conditioned separately through
+`thumbstick_x` / `thumbstick_y`.
+
+### Motion Scaling Factors
+
+`translation_scaling` and `rotation_scaling` are **read from the dataset**, not hardcoded.
+They are columns 12 and 13 of `observation.state` (`translationscaling` and
+`rotationscaling` in `meta/info.json`), mapped through `meta/modality-44D.json`, and record
+the console's motion-scaling setting at the time of recording, such that
+`instrument_motion = hand_motion x scaling`.
+
+- The translation gain is uniform over xyz; the rotation gain scales the rotation **angle**
+  about its own axis.  Both apply to relative motion only, never to absolute positions, and
+  neither changes the coordinate frame.
+- Published values are `translation_scaling` in {0.333, 0.5, 1.0} and `rotation_scaling` in
+  {1.0, 1.5, 2.0}, set at the start of surgery and rarely changing mid-episode.
+- The transform reads one pair at the **first timestep of each sampled window** and applies
+  it across all 12 action steps.
+- Values are used as recorded.  The release does not normalize them to a common regime, so
+  training covered a mixture of motion-scaling settings.
+
+Supplying unscaled hand-controller deltas at inference overstates motion by
+`1 / translation_scaling` — a factor of three for most cholecystectomy recordings.
 
 ---
 
@@ -339,6 +392,15 @@ Cosmos-specific stats files.  For non-CMR Open-H embodiments this is
 `meta/stats_cosmos-44D.json`.  CMR stats are computed over the 9D
 hybrid-relative pose format (not the raw 7D quaternion format), which is why a
 separate CMR-specific stats file is required.
+
+Statistics are generated by [`compute_openh_action_stats.py`](compute_openh_action_stats.py)
+and, for CMR Versius, [`compute_cmr_action_stats.py`](compute_cmr_action_stats.py).  CMR
+Versius additionally requires `meta/modality-44D.json` (the index layout covering the
+clutch button and the 14 `cond_*` keys) and a clutch filter cache from
+[`compute_cmr_filtered_episodes_cache.py`](compute_cmr_filtered_episodes_cache.py); see
+[Dataset metadata requirements](../docs/inference_surgical.md#dataset-metadata-requirements).
+Files suffixed `-28D` (and the unsuffixed 22D `stats_cosmos.json` in CMR directories)
+predate this 44D layout and are not interchangeable with it.
 
 ---
 
