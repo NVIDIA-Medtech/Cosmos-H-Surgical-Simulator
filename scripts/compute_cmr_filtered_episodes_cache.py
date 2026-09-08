@@ -33,8 +33,12 @@ The hash covers the dataset directory name, the split, and the action delta indi
 changed action horizon invalidates the cache. The contents, however, depend only on the
 episode data and the action horizon: every cache covers all episodes, and the train/test
 partition is applied afterwards by WrappedLeRobotSingleDataset. One cache therefore serves
-every split — the loader validates candidate caches by content, so it will reuse a cache
-whose filename names a different split or directory.
+every split — the loader requires the cache's episode-length fingerprint to match before
+reusing a cache whose filename names a different split or directory.
+
+Generation is strict: every episode declared in meta/episodes.jsonl must have a readable
+parquet file with the declared row count. Any failure aborts without writing a partial
+cache, because a missing episode is not equivalent to an episode filtered to zero samples.
 
 Usage:
     # Single dataset, train split (default)
@@ -90,6 +94,15 @@ CMR_RAW_INDEX_ARM_LINKED_RIGHT = 21
 CMR_MAX_FILTER_WORKERS = 64
 
 
+def episode_lengths_sha256(trajectory_ids: np.ndarray, trajectory_lengths: np.ndarray) -> str:
+    """Hash the complete episode ID-to-length mapping in a stable representation."""
+    pairs = sorted((int(episode_id), int(length)) for episode_id, length in zip(trajectory_ids, trajectory_lengths))
+    if len({episode_id for episode_id, _ in pairs}) != len(pairs):
+        raise ValueError("Duplicate episode IDs found in meta/episodes.jsonl")
+    payload = json.dumps(pairs, separators=(",", ":")).encode()
+    return hashlib.sha256(payload).hexdigest()
+
+
 def _filter_episode_cmr_clutch(
     episode_idx: int,
     dataset_path: Path,
@@ -97,7 +110,7 @@ def _filter_episode_cmr_clutch(
     data_path_pattern: str,
     action_delta_indices: list[int],
     episode_length: int,
-) -> tuple[int, list[int], dict[str, int]]:
+) -> tuple[int, list[int], dict[str, int], str | None]:
     """Filter a single episode for CMR clutch-aware training sample validity.
 
     Uses PyArrow for fast column-only loading of observation.state to check clutch
@@ -116,7 +129,8 @@ def _filter_episode_cmr_clutch(
         episode_length: Total length of the episode
 
     Returns:
-        Tuple of (episode_idx, list of valid base_indices, stats_dict)
+        Tuple of (episode_idx, list of valid base_indices, stats_dict, error_message).
+        error_message is None only when the complete episode was read and validated.
     """
     stats = {
         "rule1_arm_swap_left": 0,
@@ -129,13 +143,30 @@ def _filter_episode_cmr_clutch(
     parquet_path = dataset_path / data_path_pattern.format(episode_chunk=chunk_idx, episode_index=episode_idx)
 
     if not parquet_path.exists():
-        return episode_idx, [], stats
+        return episode_idx, [], stats, f"Episode {episode_idx}: parquet file not found: {parquet_path}"
 
     try:
         table = pq.read_table(parquet_path, columns=["observation.state"])
         state_data = table.column("observation.state").to_pylist()
-    except Exception:
-        return episode_idx, [], stats
+    except Exception as e:
+        return episode_idx, [], stats, f"Episode {episode_idx}: failed to read {parquet_path}: {e}"
+
+    if len(state_data) != episode_length:
+        return (
+            episode_idx,
+            [],
+            stats,
+            f"Episode {episode_idx}: row count mismatch in {parquet_path}: "
+            f"metadata length={episode_length}, parquet rows={len(state_data)}",
+        )
+    if any(len(state) <= CMR_RAW_INDEX_ARM_LINKED_RIGHT for state in state_data):
+        return (
+            episode_idx,
+            [],
+            stats,
+            f"Episode {episode_idx}: observation.state in {parquet_path} has fewer than "
+            f"{CMR_RAW_INDEX_ARM_LINKED_RIGHT + 1} values",
+        )
 
     engaged_left = np.array([s[CMR_RAW_INDEX_HAPTIC_ENGAGED_LEFT] for s in state_data], dtype=bool)
     engaged_right = np.array([s[CMR_RAW_INDEX_HAPTIC_ENGAGED_RIGHT] for s in state_data], dtype=bool)
@@ -168,7 +199,7 @@ def _filter_episode_cmr_clutch(
 
         valid_indices.append(base_idx)
 
-    return episode_idx, valid_indices, stats
+    return episode_idx, valid_indices, stats, None
 
 
 def filter_cmr_clutch_all_episodes(
@@ -221,6 +252,7 @@ def filter_cmr_clutch_all_episodes(
         "rule2_fully_disengaged": 0,
         "out_of_bounds": 0,
     }
+    errors: list[str] = []
 
     with ProcessPoolExecutor(max_workers=num_workers) as executor:
         futures = {
@@ -229,8 +261,12 @@ def filter_cmr_clutch_all_episodes(
         }
 
         for future in tqdm(as_completed(futures), total=len(futures), desc="Filtering episodes"):
-            ep_idx, valid_indices, ep_stats = future.result()
+            ep_idx, valid_indices, ep_stats, error = future.result()
             _, ep_len = futures[future]
+
+            if error is not None:
+                errors.append(error)
+                continue
 
             effective_len = max(0, ep_len - max_delta)
             total_original += effective_len
@@ -246,6 +282,15 @@ def filter_cmr_clutch_all_episodes(
                 episodes_partially_filtered += 1
             else:
                 episodes_unfiltered += 1
+
+    if errors:
+        details = "\n".join(f"  - {error}" for error in errors[:20])
+        if len(errors) > 20:
+            details += f"\n  ... and {len(errors) - 20} more"
+        raise RuntimeError(
+            f"Refusing to write an incomplete CMR filter cache: {len(errors)} episode(s) "
+            f"could not be read and validated.\n{details}"
+        )
 
     total_filtered = total_original - total_valid
     total_rule1 = aggregate_stats["rule1_arm_swap_left"] + aggregate_stats["rule1_arm_swap_right"]
@@ -438,7 +483,10 @@ def compute_filter_cache(
     }
 
     cache_data = {
+        "cache_schema_version": 2,
         "action_delta_indices": action_delta_indices,
+        "episode_lengths_sha256": episode_lengths_sha256(trajectory_ids, trajectory_lengths),
+        "episode_count": len(trajectory_ids),
         "all_steps": all_steps,
         "stats": cache_stats,
         "dataset_name": dataset_path.name,
@@ -449,8 +497,13 @@ def compute_filter_cache(
 
     # Save cache
     cache_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(cache_path, "w") as f:
-        json.dump(cache_data, f)
+    temporary_path = cache_path.with_name(f".{cache_path.name}.tmp-{os.getpid()}")
+    try:
+        with open(temporary_path, "w") as f:
+            json.dump(cache_data, f)
+        os.replace(temporary_path, cache_path)
+    finally:
+        temporary_path.unlink(missing_ok=True)
 
     print(f"\n[SUCCESS] Cached filter results to: {cache_path}")
     print(f"          Valid samples: {len(all_steps):,}")

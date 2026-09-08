@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import hashlib
 import json
 from collections import defaultdict
 from pathlib import Path
@@ -129,10 +130,69 @@ LE_ROBOT_TASKS_FILENAME = "meta/tasks.jsonl"
 LE_ROBOT_STATS_FILENAME = "meta/stats.json"
 LE_ROBOT_DATA_FILENAME = "data/*/*.parquet"
 
+# Published caches created before episode-length fingerprints were added. Each entry
+# attests both the exact cache bytes (the Hub LFS SHA-256) and the episode-length
+# fingerprint it was generated against. Unlisted legacy caches must be regenerated.
+CMR_RELEASED_LEGACY_CACHE_BINDINGS = {
+    "cmr_filter_cache_test_80d526196daa-28D.json": (
+        "3066b587aa460f89f37aa3c8c27d8ec47723971d4d7cc4439bf56a6f06b0048d",
+        "b4da53ea2f07f83cb4426c83714a84081ade3e95f360108950d64e3e5d215841",
+    ),
+    "cmr_filter_cache_train_e8215f8e4ce0-28D.json": (
+        "702c1e4a17b71eedf55478032a07fbaf5f74ef64620cb85c4c9f66b78a262825",
+        "b4da53ea2f07f83cb4426c83714a84081ade3e95f360108950d64e3e5d215841",
+    ),
+    "cmr_filter_cache_test_198577f08952-28D.json": (
+        "c063ff28e15b89d919a8d62452ad182bea469b5fe8ee98a26d5e45fb43e9131b",
+        "40584af3b0905b718e0d13cd4abcf15b3581ed7e031494149d68b63c26a504ea",
+    ),
+    "cmr_filter_cache_train_aa48a0815cee-28D.json": (
+        "ef593a131302e58221a67198e167c24d3be3d785f897ad9710656a0be261d39c",
+        "40584af3b0905b718e0d13cd4abcf15b3581ed7e031494149d68b63c26a504ea",
+    ),
+    "cmr_filter_cache_test_494daca2f2c6-28D.json": (
+        "a3f0687e38e55d641dde2dfb7f81c13bef3202256a7c3826da63e261a71cc2d0",
+        "7cfe7c44a2f12056ff0d88f89f6e3a94da249c8a02046aabf2cf74e5e10c527b",
+    ),
+    "cmr_filter_cache_test_494daca2f2c6.json": (
+        "da8479e7a2c05ae362fd4256eae051745586e63663b02d2bacc73e43e8ddcc43",
+        "7cfe7c44a2f12056ff0d88f89f6e3a94da249c8a02046aabf2cf74e5e10c527b",
+    ),
+    "cmr_filter_cache_train_3f9856ef6a19-28D.json": (
+        "718cb6311213af2f1040ee0c99f3a3b3862029e998d2be7fb02122c5a2296d9d",
+        "7cfe7c44a2f12056ff0d88f89f6e3a94da249c8a02046aabf2cf74e5e10c527b",
+    ),
+}
+
+# These published caches predate 51 episodes in the current inguinal-hernia metadata.
+# They must be replaced with schema-v2 caches rather than silently omitting those episodes.
+CMR_KNOWN_STALE_LEGACY_CACHES = {
+    "cmr_filter_cache_test_d0b3e81306e0-28D.json",
+    "cmr_filter_cache_train_7d9fea801831-28D.json",
+}
+
 # Shared AgiBot-World metadata on the cluster the model was trained on. AgiBot datasets
 # that carry no meta/ files of their own were loaded through these. The directory does not
 # exist elsewhere; when it is absent the dataset's own meta/ files are used instead.
 AGIBOT_SHARED_META_DIR = Path("/mnt/amlfs-03/shared/datasets/agibot-beta-converted-0512/agibotworld")
+
+
+def _episode_lengths_sha256(trajectory_ids, trajectory_lengths) -> str:
+    """Hash the complete episode ID-to-length mapping in a stable representation."""
+    pairs = sorted((int(episode_id), int(length)) for episode_id, length in zip(trajectory_ids, trajectory_lengths))
+    if len({episode_id for episode_id, _ in pairs}) != len(pairs):
+        raise ValueError("Duplicate episode IDs found in meta/episodes.jsonl")
+    payload = json.dumps(pairs, separators=(",", ":")).encode()
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _file_sha256(path: Path) -> str:
+    """Compute a file SHA-256 without loading a large cache twice into memory."""
+    digest = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def _get_rank_prefix() -> str:
@@ -930,13 +990,15 @@ class LeRobotSingleDataset(Dataset):
         Resolution order:
           1. the canonical filename for this dataset directory, split, and action horizon;
           2. any other ``meta/cmr_filter_cache_*.json`` whose recorded ``action_delta_indices``
-             match this configuration and whose episodes exist in this dataset.
+             and episode-length fingerprint match this dataset.
 
         The filtering rules (arm-swap and full-disengagement) depend only on the raw
         ``observation.state`` columns and the action horizon, so a cache that passes the
-        validation in step 2 is equivalent to a locally recomputed one. Split names in
-        cache filenames are cosmetic: caches always cover every episode, and the
-        train/test partition is applied afterwards by ``WrappedLeRobotSingleDataset``.
+        validation in step 2 is bound to the episode metadata it was computed from.
+        Recognized pre-fingerprint release caches are additionally verified by their Hub
+        checksum. Split names in cache filenames are cosmetic: caches always cover every
+        episode, and the train/test partition is applied afterwards by
+        ``WrappedLeRobotSingleDataset``.
 
         Args:
             action_delta_indices: Action delta indices from the active modality config.
@@ -947,8 +1009,6 @@ class LeRobotSingleDataset(Dataset):
         Raises:
             FileNotFoundError: If no cache file in ``meta/`` is valid for this configuration.
         """
-        import hashlib
-
         rank = _get_rank_prefix()
         meta_dir = self.dataset_path / "meta"
 
@@ -959,7 +1019,16 @@ class LeRobotSingleDataset(Dataset):
         candidates = [expected_path] if expected_path.exists() else []
         candidates += sorted(p for p in meta_dir.glob("cmr_filter_cache_*.json") if p != expected_path)
 
-        episode_ids = {int(i) for i in self.trajectory_ids}
+        episode_lengths = {
+            int(episode_id): int(length) for episode_id, length in zip(self.trajectory_ids, self.trajectory_lengths)
+        }
+        if len(episode_lengths) != len(self.trajectory_ids):
+            raise ValueError(f"Duplicate episode IDs found in {self.dataset_path / LE_ROBOT_EPISODE_FILENAME}")
+        episode_lengths_fingerprint = _episode_lengths_sha256(self.trajectory_ids, self.trajectory_lengths)
+        max_delta = max(action_delta_indices) if action_delta_indices else 0
+        expected_raw_frames = sum(episode_lengths.values())
+        expected_effective_samples = sum(max(0, length - max_delta) for length in episode_lengths.values())
+
         rejected: list[str] = []
         for candidate in candidates:
             try:
@@ -982,19 +1051,121 @@ class LeRobotSingleDataset(Dataset):
                 rejected.append(f"{candidate.name}: no cached samples")
                 continue
 
-            unknown = {int(ep) for ep, _ in steps} - episode_ids
-            if unknown:
+            cached_fingerprint = cache_data.get("episode_lengths_sha256")
+            if cached_fingerprint is not None:
+                schema_version = cache_data.get("cache_schema_version")
+                if (
+                    not isinstance(schema_version, int)
+                    or schema_version < 2
+                    or not isinstance(cached_fingerprint, str)
+                    or len(cached_fingerprint) != 64
+                ):
+                    rejected.append(f"{candidate.name}: malformed schema-v2 episode-length fingerprint")
+                    continue
+                if cached_fingerprint != episode_lengths_fingerprint:
+                    rejected.append(
+                        f"{candidate.name}: episode-length fingerprint mismatch "
+                        f"(cached={cached_fingerprint[:12]}, current={episode_lengths_fingerprint[:12]})"
+                    )
+                    continue
+                if cache_data.get("episode_count") != len(episode_lengths):
+                    rejected.append(
+                        f"{candidate.name}: episode count mismatch "
+                        f"(cached={cache_data.get('episode_count')!r}, current={len(episode_lengths)})"
+                    )
+                    continue
+            else:
+                legacy_binding = CMR_RELEASED_LEGACY_CACHE_BINDINGS.get(candidate.name)
+                if legacy_binding is None:
+                    if candidate.name in CMR_KNOWN_STALE_LEGACY_CACHES:
+                        rejected.append(
+                            f"{candidate.name}: known stale released cache; it predates episodes in the "
+                            f"current inguinal-hernia metadata and must be regenerated"
+                        )
+                        continue
+                    rejected.append(
+                        f"{candidate.name}: legacy cache has no episode-length fingerprint and is not a "
+                        f"recognized released cache; regenerate it with the current generator"
+                    )
+                    continue
+                expected_cache_sha256, bound_episode_fingerprint = legacy_binding
+                if bound_episode_fingerprint != episode_lengths_fingerprint:
+                    rejected.append(
+                        f"{candidate.name}: released legacy cache is bound to different episode lengths "
+                        f"(cached={bound_episode_fingerprint[:12]}, current={episode_lengths_fingerprint[:12]})"
+                    )
+                    continue
+                actual_cache_sha256 = _file_sha256(candidate)
+                if actual_cache_sha256 != expected_cache_sha256:
+                    rejected.append(
+                        f"{candidate.name}: released legacy cache checksum mismatch "
+                        f"(cached={expected_cache_sha256[:12]}, actual={actual_cache_sha256[:12]})"
+                    )
+                    continue
+
+            cached_stats = cache_data.get("stats", {})
+            expected_stats = {
+                "raw_frames": expected_raw_frames,
+                "effective_samples": expected_effective_samples,
+                "valid_samples": len(steps),
+            }
+            mismatched_stats = [
+                f"{key}={cached_stats.get(key)!r} (expected {expected_value})"
+                for key, expected_value in expected_stats.items()
+                if cached_stats.get(key) != expected_value
+            ]
+            if mismatched_stats:
                 rejected.append(
-                    f"{candidate.name}: covers {len(unknown)} episode(s) absent from this dataset "
-                    f"(e.g. {sorted(unknown)[:5]})"
+                    f"{candidate.name}: cache summary does not match current episode lengths: "
+                    f"{', '.join(mismatched_stats)}"
                 )
                 continue
 
+            normalized_steps: list[tuple[int, int]] = []
+            invalid_step = None
+            previous_step = None
+            for position, step in enumerate(steps):
+                if not isinstance(step, (list, tuple)) or len(step) != 2:
+                    invalid_step = f"entry {position} is not an (episode_id, base_index) pair"
+                    break
+                if (
+                    not isinstance(step[0], int)
+                    or isinstance(step[0], bool)
+                    or not isinstance(step[1], int)
+                    or isinstance(step[1], bool)
+                ):
+                    invalid_step = f"entry {position} contains non-integer values: {step!r}"
+                    break
+                episode_id, base_index = step
+                episode_length = episode_lengths.get(episode_id)
+                if episode_length is None:
+                    invalid_step = f"entry {position} references absent episode {episode_id}"
+                    break
+                effective_length = max(0, episode_length - max_delta)
+                if base_index < 0 or base_index >= effective_length:
+                    invalid_step = (
+                        f"entry {position} has out-of-range base index {base_index} for episode "
+                        f"{episode_id} (valid range: 0..{effective_length - 1})"
+                    )
+                    break
+                normalized_step = (episode_id, base_index)
+                if previous_step is not None and normalized_step <= previous_step:
+                    invalid_step = (
+                        f"entry {position} is duplicate or out of order: {normalized_step} after {previous_step}"
+                    )
+                    break
+                normalized_steps.append(normalized_step)
+                previous_step = normalized_step
+            if invalid_step is not None:
+                rejected.append(f"{candidate.name}: invalid cached samples: {invalid_step}")
+                continue
+
+            cache_data["all_steps"] = normalized_steps
             if candidate != expected_path:
                 print(
                     f"{rank}[CMR Filter] Canonical cache {expected_path.name} not present; "
                     f"reusing {candidate.name}, which was validated against this configuration "
-                    f"(same action horizon, episodes all present)."
+                    f"(same action horizon and episode-length fingerprint)."
                 )
             print(f"{rank}[CMR Filter] Loading pre-computed cache from: {candidate}")
             return candidate, cache_data

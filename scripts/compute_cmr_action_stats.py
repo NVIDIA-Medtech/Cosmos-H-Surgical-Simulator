@@ -72,6 +72,11 @@ necessary for a custom CMR dataset, a different action horizon, or a different f
 stride. Statistics are derived from the parquet action/state columns only and are
 therefore independent of the video resolution of the dataset variant.
 
+Generation is strict by default: every selected episode declared in meta/episodes.jsonl
+must have a readable parquet file with the declared row count. Any failure aborts without
+writing statistics. --max-episodes is the explicit partial-processing mode and requires a
+separate --output path so it cannot overwrite the dataset's canonical statistics.
+
 RAW PARQUET FORMAT (from CMR Versius dataset):
 The parquet files contain flat arrays, NOT named columns:
   - observation.state: float64[100] array
@@ -107,7 +112,6 @@ import json
 import os
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
-from functools import partial
 from pathlib import Path
 
 import numpy as np
@@ -851,6 +855,7 @@ def process_episode(
 
 def process_parquet_file(
     parquet_path: Path,
+    expected_length: int,
     action_horizon: int,
     frame_stride: int,
     apply_filtering: bool,
@@ -863,6 +868,7 @@ def process_parquet_file(
 
     Args:
         parquet_path: Path to the parquet file
+        expected_length: Episode length declared in meta/episodes.jsonl
         action_horizon: Number of action steps
         frame_stride: Frame stride for subsampling
         apply_filtering: Whether to apply clutch-aware filtering
@@ -873,6 +879,14 @@ def process_parquet_file(
     """
     try:
         df = pd.read_parquet(parquet_path)
+
+        if len(df) != expected_length:
+            return (
+                np.empty((0, 44)),
+                np.empty((0, 16)),
+                {},
+                f"Row count mismatch in {parquet_path}: metadata length={expected_length}, parquet rows={len(df)}",
+            )
 
         # Verify raw parquet format
         if "observation.state" not in df.columns or "action" not in df.columns:
@@ -926,6 +940,39 @@ def _discover_datasets(root: Path) -> list[Path]:
         if child.is_dir() and _is_lerobot_dataset(child):
             datasets.append(child)
     return datasets
+
+
+def _load_expected_parquet_files(dataset_path: Path) -> list[tuple[Path, int]]:
+    """Resolve every episode parquet path from required LeRobot metadata."""
+    episodes_path = dataset_path / "meta/episodes.jsonl"
+    info_path = dataset_path / "meta/info.json"
+    if not episodes_path.exists():
+        raise FileNotFoundError(f"Required episode metadata not found: {episodes_path}")
+    if not info_path.exists():
+        raise FileNotFoundError(f"Required dataset metadata not found: {info_path}")
+
+    with open(episodes_path, "r") as f:
+        episodes = [json.loads(line) for line in f]
+    with open(info_path, "r") as f:
+        info = json.load(f)
+
+    episode_ids = [int(episode["episode_index"]) for episode in episodes]
+    if len(set(episode_ids)) != len(episode_ids):
+        raise ValueError(f"Duplicate episode IDs found in {episodes_path}")
+
+    chunk_size = int(info["chunks_size"])
+    data_path_pattern = info["data_path"]
+    return [
+        (
+            dataset_path
+            / data_path_pattern.format(
+                episode_chunk=episode_id // chunk_size,
+                episode_index=episode_id,
+            ),
+            int(episode["length"]),
+        )
+        for episode_id, episode in zip(episode_ids, episodes)
+    ]
 
 
 # Component slices (used at the end to extract per-component stats from reservoir)
@@ -999,21 +1046,31 @@ def process_single_dataset(
     Returns:
         True if successful, False if no valid data found
     """
-    parquet_files = sorted(dataset_path.glob("data/*/*.parquet"))
+    episode_files = _load_expected_parquet_files(dataset_path)
 
-    if not parquet_files:
-        print(f"  No parquet files found in {dataset_path / 'data'}, skipping.")
+    if not episode_files:
+        print(f"  No episodes declared in {dataset_path / 'meta/episodes.jsonl'}, skipping.")
         return False
 
     if max_episodes:
-        parquet_files = parquet_files[:max_episodes]
+        episode_files = episode_files[:max_episodes]
+
+    missing_files = [path for path, _ in episode_files if not path.exists()]
+    if missing_files:
+        details = "\n".join(f"  - {path}" for path in missing_files[:20])
+        if len(missing_files) > 20:
+            details += f"\n  ... and {len(missing_files) - 20} more"
+        raise FileNotFoundError(
+            f"Refusing to compute statistics from an incomplete dataset: "
+            f"{len(missing_files)} expected episode parquet file(s) are missing.\n{details}"
+        )
 
     # Print configuration header
     print("=" * 80)
     print(f"CMR VERSIUS ACTION STATISTICS — {dataset_path.name}")
     print("=" * 80)
     print(f"Dataset path: {dataset_path}")
-    print(f"Number of episodes: {len(parquet_files)}")
+    print(f"Number of episodes: {len(episode_files)}")
     print(f"Action horizon: {action_horizon}")
     print(f"Frame stride: {frame_stride}")
     print("Motion scaling: ENABLED (using observation.state indices 12 and 13)")
@@ -1052,21 +1109,23 @@ def process_single_dataset(
     total_action_samples = 0
     total_state_samples = 0
 
-    # Create partial function with fixed arguments
-    process_fn = partial(
-        process_parquet_file,
-        action_horizon=action_horizon,
-        frame_stride=frame_stride,
-        apply_filtering=not no_filter,
-    )
-
     # Process files in parallel
-    print(f"\nProcessing {len(parquet_files)} parquet files with {num_workers} workers...")
+    print(f"\nProcessing {len(episode_files)} parquet files with {num_workers} workers...")
     print(f"Using STREAMING STATISTICS (reservoir size: {RESERVOIR_SIZE:,} samples)")
 
     with ProcessPoolExecutor(max_workers=num_workers) as executor:
         # Submit all tasks
-        future_to_path = {executor.submit(process_fn, pf): pf for pf in parquet_files}
+        future_to_path = {
+            executor.submit(
+                process_parquet_file,
+                parquet_path,
+                expected_length,
+                action_horizon,
+                frame_stride,
+                not no_filter,
+            ): parquet_path
+            for parquet_path, expected_length in episode_files
+        }
 
         # Collect results with progress bar
         for future in tqdm(
@@ -1100,13 +1159,17 @@ def process_single_dataset(
                 action_stats_tracker.update_fast(rel_actions)
                 state_stats_tracker.update_fast(states)
 
-    # Print warnings if any
+    # Any failed episode would bias the output distribution, so do not write stats.
     if warnings_list:
-        print(f"\n⚠️  {len(warnings_list)} warnings during processing:")
+        print(f"\nERROR: {len(warnings_list)} episode(s) failed validation:")
         for w in warnings_list[:10]:
             print(f"  - {w}")
         if len(warnings_list) > 10:
-            print(f"  ... and {len(warnings_list) - 10} more warnings")
+            print(f"  ... and {len(warnings_list) - 10} more")
+        raise RuntimeError(
+            f"Refusing to write statistics from an incomplete dataset: "
+            f"{len(warnings_list)} episode(s) could not be read and validated"
+        )
 
     if total_action_samples == 0:
         print("No valid data found!")
@@ -1140,20 +1203,20 @@ def process_single_dataset(
             print(f"  Out of bounds (edge cases):   {aggregate_filter_stats['out_of_bounds']:,} samples")
         print("-" * 80)
         print("EPISODE STATISTICS:")
-        print(f"  Total episodes: {len(parquet_files)}")
-        print(f"  Episodes successfully processed: {len(parquet_files) - episodes_with_errors}")
+        print(f"  Total episodes: {len(episode_files)}")
+        print(f"  Episodes successfully processed: {len(episode_files) - episodes_with_errors}")
         if episodes_with_errors > 0:
             print(
-                f"  Episodes with errors: {episodes_with_errors} ({100 * episodes_with_errors / max(1, len(parquet_files)):.1f}%)"
+                f"  Episodes with errors: {episodes_with_errors} ({100 * episodes_with_errors / max(1, len(episode_files)):.1f}%)"
             )
         print(
-            f"  Episodes fully filtered (0 valid samples): {episodes_fully_filtered} ({100 * episodes_fully_filtered / max(1, len(parquet_files)):.1f}%)"
+            f"  Episodes fully filtered (0 valid samples): {episodes_fully_filtered} ({100 * episodes_fully_filtered / max(1, len(episode_files)):.1f}%)"
         )
         print(
-            f"  Episodes partially filtered: {episodes_partially_filtered} ({100 * episodes_partially_filtered / max(1, len(parquet_files)):.1f}%)"
+            f"  Episodes partially filtered: {episodes_partially_filtered} ({100 * episodes_partially_filtered / max(1, len(episode_files)):.1f}%)"
         )
         print(
-            f"  Episodes unfiltered (all valid): {episodes_unfiltered} ({100 * episodes_unfiltered / max(1, len(parquet_files)):.1f}%)"
+            f"  Episodes unfiltered (all valid): {episodes_unfiltered} ({100 * episodes_unfiltered / max(1, len(episode_files)):.1f}%)"
         )
         print("=" * 80)
 
@@ -1212,8 +1275,13 @@ def process_single_dataset(
     final_output_path = output_path if output_path else dataset_path / "meta" / "stats_cosmos-44D.json"
     final_output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    with open(final_output_path, "w") as f:
-        json.dump(stats, f, indent=2)
+    temporary_path = final_output_path.with_name(f".{final_output_path.name}.tmp-{os.getpid()}")
+    try:
+        with open(temporary_path, "w") as f:
+            json.dump(stats, f, indent=2)
+        os.replace(temporary_path, final_output_path)
+    finally:
+        temporary_path.unlink(missing_ok=True)
 
     print(f"\nSaved stats to {final_output_path}")
 
@@ -1266,7 +1334,7 @@ def process_single_dataset(
     return True
 
 
-def main():
+def main() -> int:
     parser = argparse.ArgumentParser(
         description="Compute normalization stats for CMR Versius hybrid-relative actions",
         epilog=(
@@ -1312,6 +1380,10 @@ def main():
         help="Number of parallel workers (default: min(cpu_count, MAX_WORKERS))",
     )
     args = parser.parse_args()
+    if args.max_episodes is not None and args.max_episodes <= 0:
+        parser.error("--max-episodes must be greater than zero")
+    if args.max_episodes is not None and (not args.dataset_path or not args.output):
+        parser.error("--max-episodes is partial processing and requires single --dataset-path mode with --output")
 
     # Determine number of workers
     if args.num_workers is None:
@@ -1325,13 +1397,13 @@ def main():
         dataset_paths = [Path(args.dataset_path)]
         if not dataset_paths[0].exists():
             print(f"ERROR: Dataset path does not exist: {dataset_paths[0]}")
-            return
+            return 1
     else:
         # Root directory mode — auto-discover datasets
         root = Path(args.dataset_path_root)
         if not root.exists():
             print(f"ERROR: Root directory does not exist: {root}")
-            return
+            return 1
 
         # Check if root itself is a dataset
         if _is_lerobot_dataset(root):
@@ -1343,7 +1415,7 @@ def main():
         if not dataset_paths:
             print(f"ERROR: No LeRobot datasets found under {root}")
             print("  (Expected subdirectories with data/ and meta/ containing parquet files)")
-            return
+            return 1
 
         if args.output:
             print("WARNING: --output is ignored in --dataset-path-root mode (each dataset gets its own stats file)")
@@ -1358,6 +1430,7 @@ def main():
     # Process each dataset
     total_start = time.time()
     results = {}
+    failed = False
 
     for i, dataset_path in enumerate(dataset_paths, 1):
         if len(dataset_paths) > 1:
@@ -1367,16 +1440,21 @@ def main():
 
         output_path = Path(args.output) if (args.output and len(dataset_paths) == 1) else None
 
-        success = process_single_dataset(
-            dataset_path=dataset_path,
-            action_horizon=args.action_horizon,
-            frame_stride=args.frame_stride,
-            no_filter=args.no_filter,
-            num_workers=num_workers,
-            max_episodes=args.max_episodes,
-            output_path=output_path,
-        )
-        results[dataset_path.name] = "✅ OK" if success else "❌ FAILED (no valid data)"
+        try:
+            success = process_single_dataset(
+                dataset_path=dataset_path,
+                action_horizon=args.action_horizon,
+                frame_stride=args.frame_stride,
+                no_filter=args.no_filter,
+                num_workers=num_workers,
+                max_episodes=args.max_episodes,
+                output_path=output_path,
+            )
+        except Exception as e:
+            print(f"\nERROR: Failed to compute statistics for {dataset_path}: {e}")
+            success = False
+        failed |= not success
+        results[dataset_path.name] = "✅ OK" if success else "❌ FAILED"
 
     total_elapsed = time.time() - total_start
 
@@ -1389,6 +1467,8 @@ def main():
             print(f"  {name}: {status}")
         print(f"{'#' * 80}")
 
+    return 1 if failed else 0
+
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
