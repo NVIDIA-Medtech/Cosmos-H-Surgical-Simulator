@@ -286,8 +286,8 @@ class LeRobotSingleDataset(Dataset):
             transforms (ComposedModalityTransform): The transforms to apply to the dataset.
             embodiment_tag (EmbodimentTag): Overload the embodiment tag for the dataset. e.g. define it as "new_embodiment"
             modality_filename (str | None): Path to the modality metadata JSON file relative to
-                dataset_path. If None, auto-detects: tries CMR-specific file first for CMR_VERSIUS,
-                then falls back to the standard modality.json.
+                dataset_path. If None, CMR Versius uses modality-44D.json and every other
+                embodiment uses modality.json.
             exclude_splits (list[str] | None): Split names from info.json to exclude
                 (e.g., ["fail", "bad_frames"]). Episodes in these splits are filtered out.
         """
@@ -303,20 +303,22 @@ class LeRobotSingleDataset(Dataset):
         self._dataset_path = Path(dataset_path)
         self._dataset_name = self._dataset_path.name
 
-        # Resolve modality filename: explicit > CMR-specific > default
+        if isinstance(embodiment_tag, EmbodimentTag):
+            self.tag = embodiment_tag.value
+        else:
+            self.tag = embodiment_tag
+
+        # Resolve modality filename from the model contract, not from file existence. In
+        # particular, a missing CMR 44D file must not silently select legacy modality.json.
         if modality_filename is not None:
             self._modality_filename = modality_filename
-        elif (self._dataset_path / LE_ROBOT_CMR_MODALITY_FILENAME).exists():
+        elif self.tag == EmbodimentTag.CMR_VERSIUS.value:
             self._modality_filename = LE_ROBOT_CMR_MODALITY_FILENAME
         else:
             self._modality_filename = LE_ROBOT_DEFAULT_MODALITY_FILENAME
         # Default data_split for base class (can be overridden by subclasses like WrappedLeRobotSingleDataset)
         if not hasattr(self, "data_split"):
             self.data_split = "full"
-        if isinstance(embodiment_tag, EmbodimentTag):
-            self.tag = embodiment_tag.value
-        else:
-            self.tag = embodiment_tag
 
         # Resolve excluded episode indices from info.json splits
         self._exclude_splits = exclude_splits
@@ -444,8 +446,7 @@ class LeRobotSingleDataset(Dataset):
     def _resolve_modality_meta_path(self) -> Path:
         """Locate the modality metadata describing this dataset's state/action layout.
 
-        Falls back to the shared AgiBot-World copy when that directory is reachable, which
-        is how AgiBot datasets without their own metadata were loaded during training.
+        AgiBot falls back to its shared training copy when that directory is reachable.
 
         Returns:
             Path of the modality metadata file to read.
@@ -459,7 +460,7 @@ class LeRobotSingleDataset(Dataset):
             return modality_meta_path
 
         agibot_fallback = AGIBOT_SHARED_META_DIR / "modality.json"
-        if agibot_fallback.exists():
+        if self.tag == EmbodimentTag.AGIBOT.value and agibot_fallback.exists():
             print(
                 f"WARNING: {self._modality_filename} not found in {self.dataset_path}; "
                 f"falling back to {agibot_fallback}"
@@ -483,6 +484,25 @@ class LeRobotSingleDataset(Dataset):
             f"the dataset's meta/ directory. The released datasets ship it, so if it is\n"
             f"missing the download is incomplete.\n"
             f"{cmr_hint}"
+            f"{'=' * 80}\n"
+        )
+
+    def _require_dataset_metadata(self, filename: str, purpose: str) -> Path:
+        """Return a required metadata path or raise an actionable missing-file error."""
+        path = self.dataset_path / filename
+        if path.exists():
+            return path
+
+        raise FileNotFoundError(
+            f"\n{'=' * 80}\n"
+            f"MISSING REQUIRED DATASET METADATA\n"
+            f"{'=' * 80}\n"
+            f"Dataset:  {self.dataset_path}\n"
+            f"Expected: {path}\n"
+            f"Purpose:  {purpose}\n\n"
+            f"If this is a released Open-H dataset, the download is incomplete. Re-download\n"
+            f"this file from the dataset's meta/ directory. For a custom LeRobot dataset,\n"
+            f"provide the file before constructing the dataset.\n"
             f"{'=' * 80}\n"
         )
 
@@ -517,8 +537,10 @@ class LeRobotSingleDataset(Dataset):
                 }
 
         # 1.2. Video modalities
-        le_info_path = self.dataset_path / LE_ROBOT_INFO_FILENAME
-        assert le_info_path.exists(), f"Please provide a {LE_ROBOT_INFO_FILENAME} file in {self.dataset_path}"
+        le_info_path = self._require_dataset_metadata(
+            LE_ROBOT_INFO_FILENAME,
+            "declares dataset features, video paths, frame rate, and chunk size",
+        )
         with open(le_info_path, "r") as f:
             le_info = json.load(f)
         simplified_modality_meta["video"] = {}
@@ -756,7 +778,10 @@ class LeRobotSingleDataset(Dataset):
     def _get_trajectories(self) -> tuple[np.ndarray, np.ndarray]:
         """Get the trajectories in the dataset."""
         # Get trajectory lengths, IDs, and whitelist from dataset metadata
-        episode_path = self.dataset_path / LE_ROBOT_EPISODE_FILENAME
+        episode_path = self._require_dataset_metadata(
+            LE_ROBOT_EPISODE_FILENAME,
+            "declares every episode index and length",
+        )
         with open(episode_path, "r") as f:
             episode_metadata = [json.loads(line) for line in f]
         trajectory_ids = []
@@ -1021,7 +1046,10 @@ class LeRobotSingleDataset(Dataset):
 
     def _get_lerobot_info_meta(self) -> dict:
         """Get the metadata for the LeRobot dataset."""
-        info_meta_path = self.dataset_path / LE_ROBOT_INFO_FILENAME
+        info_meta_path = self._require_dataset_metadata(
+            LE_ROBOT_INFO_FILENAME,
+            "declares dataset features, video paths, frame rate, and chunk size",
+        )
         with open(info_meta_path, "r") as f:
             info_meta = json.load(f)
         return info_meta
@@ -1040,7 +1068,10 @@ class LeRobotSingleDataset(Dataset):
 
     def _get_tasks(self) -> pd.DataFrame:
         """Get the tasks for the dataset."""
-        tasks_path = self.dataset_path / LE_ROBOT_TASKS_FILENAME
+        tasks_path = self._require_dataset_metadata(
+            LE_ROBOT_TASKS_FILENAME,
+            "maps task indices to the language instructions used for conditioning",
+        )
         with open(tasks_path, "r") as f:
             tasks = [json.loads(line) for line in f]
         df = pd.DataFrame(tasks)
@@ -1607,7 +1638,10 @@ class WrappedLeRobotSingleDataset(LeRobotSingleDataset):
     def _get_trajectories(self) -> tuple[np.ndarray, np.ndarray]:
         """Get the trajectories in the dataset."""
         # Get trajectory lengths, IDs, and whitelist from dataset metadata
-        episode_path = self.dataset_path / LE_ROBOT_EPISODE_FILENAME
+        episode_path = self._require_dataset_metadata(
+            LE_ROBOT_EPISODE_FILENAME,
+            "declares every episode index and length",
+        )
         with open(episode_path, "r") as f:
             episode_metadata = [json.loads(line) for line in f]
         trajectory_ids = []
