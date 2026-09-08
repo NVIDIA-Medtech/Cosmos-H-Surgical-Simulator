@@ -86,7 +86,7 @@ Index mappings (raw indices from info.json):
   ACTION array (indices 0-25, rest zero-padded):
     Left:  0-2=xyz, 3-6=quat_xyzw, 7=clutch, 8=energy, 9=thumbstickBtn, 10=pince, 11-12=thumbstick
     Right: 13-15=xyz, 16-19=quat_xyzw, 20=clutch, 21=energy, 22=thumbstickBtn, 23=pince, 24-25=thumbstick
-  
+
   STATE array (indices 0-23, rest zero-padded):
     0-1=haptic_armengageable (left/right), 2-6=arm_0..4_color, 7-11=arm_0..4_instrtype
     12=translation_scaling, 13=rotation_scaling, 16=hapticengaged_left, 17=hapticengaged_right
