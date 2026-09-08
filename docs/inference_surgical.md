@@ -45,7 +45,8 @@ Those six files are everything the loader reads, so prefer them over `--include 
 Pass each pattern with its own `--include`. Hugging Face CLI 1.x treats additional values
 after one `--include` as positional filenames and ignores the include pattern. Because
 filtering happens after the multi-TB repository tree is listed, this command may show no
-progress for several minutes before the transfer starts.
+progress for 20-30 minutes before the transfer starts. Do not interrupt an active process
+solely because no download progress bar is visible yet.
 
 Episode indices are dataset-wide and come from `meta/episodes.jsonl`, not from the files on disk, so a partial download still resolves the shipped filter cache correctly. `--episode_ids` selects among the episodes whose files you downloaded, and only those episodes are read at generation time.
 
@@ -53,9 +54,15 @@ For a different procedure, substitute `hysterectomy`, `inguinal_hernia` or `pros
 
 On a cold machine, model construction also downloads the two Cosmos-Predict2.5-2B base
 checkpoints, one Cosmos-Predict2.5-14B base checkpoint, and the Wan2.1 VAE. These
-auxiliary assets total about 37.5 GB in addition to the 4.3 GB surgical checkpoint and
-the selected dataset files. Allow about 60 GB of free space and set `HF_HOME` to the
-desired cache volume before the first run.
+auxiliary checkpoint payloads total about 37.5 GB, while the resulting Hub cache occupied
+about 51 GB in a clean end-to-end test. In addition to the 4.3 GB surgical checkpoint,
+the selected dataset files, and the Python package cache, allow at least 80 GB of free
+space.
+
+Set `HF_HOME` to the desired cache volume before the first run. If `HF_HUB_CACHE` or the
+legacy `HUGGINGFACE_HUB_CACHE` is already set, it overrides the Hub cache location derived
+from `HF_HOME`; unset it or point it at the same volume. `TRANSFORMERS_CACHE` is deprecated
+and should not be introduced for new setups.
 
 ## Dataset metadata requirements
 
