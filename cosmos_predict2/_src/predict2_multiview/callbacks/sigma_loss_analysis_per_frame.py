@@ -299,7 +299,7 @@ class SigmaLossAnalysisPerFrame(Callback):
                             }
                             easy_io.dump(
                                 save_data,
-                                f"s3://rundir/{self.name}/{prefix}_Iter{iteration:09d}.pkl",
+                                f"s3://rundir/{self.name}/{prefix}_Iter{iteration:09d}.cdata",
                             )
 
         cache.reset()

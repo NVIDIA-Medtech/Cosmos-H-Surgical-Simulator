@@ -16,12 +16,15 @@
 import importlib
 import json
 import os
+import secrets
 import subprocess
 import time
 
 import gradio_client.client as gradio_client
 import requests
 from loguru import logger as log
+
+from cosmos_gradio.security import AccessPolicy
 
 
 class TestHarness:
@@ -36,6 +39,7 @@ class TestHarness:
         self.check_interval = check_interval
         self.base_url = f"http://{host}:{port}"
         self.process = None
+        self.auth = None
 
     def start_server(self, server_module, env_vars=None):
         module = importlib.import_module(server_module)
@@ -48,6 +52,12 @@ class TestHarness:
         env = os.environ.copy()
         if env_vars:
             env.update(env_vars)
+
+        env.setdefault("COSMOS_GRADIO_USERNAME", "test_operator")
+        if not env.get("COSMOS_GRADIO_PASSWORD") and not env.get("COSMOS_GRADIO_PASSWORD_FILE"):
+            env["COSMOS_GRADIO_PASSWORD"] = secrets.token_urlsafe(32)
+        policy = AccessPolicy.from_environment(env)
+        self.auth = (policy.username, policy.password)
 
         log.info(f"launching sub-process for Gradio server with {bootstrapper_path}")
         # pyrefly: ignore  # bad-assignment
@@ -89,7 +99,7 @@ class TestHarness:
         return False
 
     def send_sample(self, request_data=None):
-        client = gradio_client.Client(self.base_url)
+        client = gradio_client.Client(self.base_url, auth=self.auth)
         log.info(f"Available APIs: {client.view_api()}")
 
         request_text = json.dumps(request_data)
@@ -153,7 +163,7 @@ class TestHarness:
 
     @staticmethod
     def test(server_module, env_vars, sample_request):
-        log.info(f"Starting Gradio server test for {server_module} with {env_vars}")
+        log.info(f"Starting Gradio server test for {server_module}")
 
         with TestHarness() as harness:
             harness.start_server(server_module=server_module, env_vars=env_vars)

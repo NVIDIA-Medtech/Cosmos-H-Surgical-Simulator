@@ -19,6 +19,7 @@ import torch
 from cosmos_gradio.deployment_env import DeploymentEnv
 from cosmos_gradio.gradio_app.gradio_app import GradioApp
 from cosmos_gradio.gradio_app.gradio_ui import create_gradio_UI
+from cosmos_gradio.security import AccessPolicy, launch_options
 
 from cosmos_predict2._src.imaginaire.utils import log
 from cosmos_predict2.config import InferenceArguments, SetupArguments
@@ -89,6 +90,8 @@ def validate_multiview(kwargs):
 
 
 if __name__ == "__main__":
+    access_policy = AccessPolicy.from_environment()
+    options = launch_options(access_policy)
     model_cfg = ModelConfig()
     global_env = DeploymentEnv()
 
@@ -129,13 +132,7 @@ if __name__ == "__main__":
         uploads_dir=global_env.uploads_dir,
         output_dir=global_env.output_dir,
         log_file=global_env.log_file,
+        access_policy=access_policy,
     )
 
-    interface.launch(
-        server_name="0.0.0.0",
-        server_port=8080,
-        share=False,
-        debug=True,
-        max_file_size="500MB",
-        allowed_paths=global_env.allowed_paths,
-    )
+    interface.launch(**options)

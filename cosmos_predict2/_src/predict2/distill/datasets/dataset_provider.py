@@ -23,10 +23,8 @@ except ImportError:
     USE_MEGATRON = False
 from typing import Callable, Optional
 
-from webdataset.handlers import warn_and_continue  # type: ignore
-
+import cosmos_predict2._src.imaginaire.datasets.webdataset.decoders.data as data_decoders
 import cosmos_predict2._src.imaginaire.datasets.webdataset.decoders.image as image_decoders
-import cosmos_predict2._src.imaginaire.datasets.webdataset.decoders.pickle as pickle_decoders
 import cosmos_predict2._src.imaginaire.datasets.webdataset.distributors as distributors
 import cosmos_predict2._src.predict2.datasets.decoders.video_decoder as video_decoder
 import cosmos_predict2._src.predict2.datasets.distributor.parallel_sync_multi_aspect_ratio as parallel_sync_multi_aspect_ratio
@@ -158,14 +156,16 @@ def get_video_dataset(
                 min_fps_thres=min_fps_thres,
                 max_fps_thres=max_fps_thres,
             ),
-            pickle_decoders.pkl_decoder,
+            data_decoders.data_decoder,
         ],
         augmentation=augmentor,
         remove_extension_from_keys=True,
         sample_keys_full_list_path=None,
     )
 
-    return webdataset.Dataset(config=video_data_config, decoder_handler=warn_and_continue, detshuffle=detshuffle)
+    return webdataset.Dataset(
+        config=video_data_config, decoder_handler=data_decoders.decoding_error_handler, detshuffle=detshuffle
+    )
 
 
 def get_image_dataset(
@@ -233,7 +233,7 @@ def get_image_dataset(
         distributor=distributor,
         decoders=[
             image_decoders.pil_loader,
-            pickle_decoders.pkl_decoder,
+            data_decoders.data_decoder,
         ],
         augmentation=augmentation,
     )

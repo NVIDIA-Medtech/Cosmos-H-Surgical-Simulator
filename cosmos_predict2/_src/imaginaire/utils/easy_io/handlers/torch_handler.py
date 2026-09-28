@@ -18,6 +18,7 @@ try:
 except ImportError:
     torch = None
 
+from cosmos_predict2._src.imaginaire.utils.checkpoint_loading import load_weights, save_weights
 from cosmos_predict2._src.imaginaire.utils.easy_io.handlers.base import BaseFileHandler
 
 
@@ -25,10 +26,10 @@ class TorchHandler(BaseFileHandler):
     str_like = False
 
     def load_from_fileobj(self, file, **kwargs):
-        return torch.load(file, **kwargs)
+        return load_weights(file, **kwargs)
 
     def dump_to_fileobj(self, obj, file, **kwargs):
-        torch.save(obj, file, **kwargs)
+        save_weights(obj, file, **kwargs)
 
     def dump_to_str(self, obj, **kwargs):
         raise NotImplementedError

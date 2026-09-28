@@ -15,11 +15,11 @@
 
 import argparse
 import os
-import pickle
 
 import numpy as np
 from tqdm import tqdm
 
+from cosmos_predict2._src.imaginaire.utils import safe_data
 from cosmos_predict2._src.predict2.inference.get_t5_emb import (
     T5_MODEL_DIR,
     CosmosT5TextEncoder,
@@ -70,7 +70,7 @@ def main(args) -> None:
         with open(meta_txt_filename, "w") as fp:
             fp.write(prompt)
 
-        t5_xxl_filename = os.path.join(t5_xxl_dir, os.path.basename(video_filename).replace(".mp4", ".pickle"))
+        t5_xxl_filename = os.path.join(t5_xxl_dir, os.path.basename(video_filename).replace(".mp4", ".cdata"))
         if os.path.exists(t5_xxl_filename):
             print(f"Skipping {t5_xxl_filename} because it already exists")
             # Skip if the file already exists
@@ -88,9 +88,9 @@ def main(args) -> None:
         # trim zeros to save space
         encoded_text = [encoded_text[batch_id][: lengths[batch_id]] for batch_id in range(encoded_text.shape[0])]
 
-        # Save T5 embeddings as pickle file
+        # Save T5 embeddings as a non-executable data archive
         with open(t5_xxl_filename, "wb") as fp:
-            pickle.dump(encoded_text, fp)  # list of np.ndarray in (len, 1024)
+            safe_data.dump(encoded_text, fp)  # list of np.ndarray in (len, 1024)
 
 
 if __name__ == "__main__":

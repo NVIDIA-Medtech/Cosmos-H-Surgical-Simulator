@@ -34,7 +34,7 @@ class ItemDatasetConfig:
 
 class PromptOnlyItemDataset(torch.utils.data.Dataset):
     """
-    A simple dataset class for handling sequences of pickle data read from a specified path.
+    A simple dataset class for handling sequences of numeric archive data read from a specified path.
     It supports reading from local paths or S3. It currently handles prompts and T5 embeddings.
     The class is mainly for debug and testing purposes.
 
@@ -78,16 +78,15 @@ class PromptOnlyItemDataset(torch.utils.data.Dataset):
         return self.end_index - self.start_index
 
     def __getitem__(self, idx):
-        while True:
-            try:
-                return self._getitem(idx)
-            except Exception as e:
-                log.error(f"Error in __getitem__ {e}")
-                continue
+        try:
+            return self._getitem(idx)
+        except Exception as e:
+            log.error(f"Error in __getitem__ {e}")
+            raise
 
     def _getitem(self, idx):
         """
-        Retrieves a specific pickle file based on its index, performing preprocessing
+        Retrieves a specific safe data file based on its index, performing preprocessing
         on text and image data and handling padding as needed.
 
         Args:
@@ -97,7 +96,7 @@ class PromptOnlyItemDataset(torch.utils.data.Dataset):
             dict: A dictionary containing preprocessed dataset items, including embeddings, masks,
                 and potentially transformed images.
         """
-        item_fp = os.path.join(self.path, f"{self.start_index + idx:06d}.pkl")
+        item_fp = os.path.join(self.path, f"{self.start_index + idx:06d}.cdata")
         item = easy_io.load(item_fp)
 
         if item is None:
@@ -170,7 +169,7 @@ class PromptImageItemDataset(PromptOnlyItemDataset):
         )
         file_paths = easy_io.list_dir_or_file(self.path, recursive=True, list_dir=False, suffix=".mp4")
         file_paths = sorted([path[:-4] for path in file_paths])
-        item_fp = os.path.join(self.path, file_paths[file_idx] + ".pkl")
+        item_fp = os.path.join(self.path, file_paths[file_idx] + ".cdata")
         item = easy_io.load(item_fp)
         if item is None:
             raise ValueError(f"item is None: {item_fp}")
@@ -229,14 +228,14 @@ class PromptImageItemDataset(PromptOnlyItemDataset):
 class PromptVideoItemDataset(PromptOnlyItemDataset):
     """
     Dataset for evaluation with prompt and video pairs.
-    Expects pickle files with 'prompt' field and corresponding MP4 video files.
+    Expects safe data files with 'prompt' field and corresponding MP4 video files.
 
     Note:
         We intentionally do NOT load saved T5 embeddings from disk.
         Embeddings will be computed online in the model/callback (see text2world_model and ValLossComputation).
 
     Args:
-        path (str): Path to dataset containing .pkl and .mp4 files
+        path (str): Path to dataset containing .cdata and .mp4 files
         start_index (int): Starting index (inclusive)
         end_index (int): Ending index (exclusive)
         max_t5_length (int): Maximum T5 sequence length
@@ -291,10 +290,10 @@ class PromptVideoItemDataset(PromptOnlyItemDataset):
         if file_idx >= len(self.file_paths):
             raise IndexError(f"Index {file_idx} out of range for {len(self.file_paths)} files")
 
-        pkl_path = os.path.join(self.path, self.file_paths[file_idx] + ".pkl")
+        pkl_path = os.path.join(self.path, self.file_paths[file_idx] + ".cdata")
         video_path = os.path.join(self.path, self.file_paths[file_idx] + ".mp4")
 
-        # Load pickle data (expects at least 'prompt')
+        # Load safe data data (expects at least 'prompt')
         item = easy_io.load(pkl_path)
         if item is None:
             raise ValueError(f"item is None: {pkl_path}")
@@ -365,10 +364,10 @@ class PromptLVGItemDataset(PromptOnlyItemDataset):
         cur_idx = self.start_index + idx
         file_idx = cur_idx
 
-        item_fp = os.path.join(self.path, f"{file_idx:06d}.pkl")
+        item_fp = os.path.join(self.path, f"{file_idx:06d}.cdata")
         item = easy_io.load(item_fp)
         input_image_or_video_ext = item["ext"]
-        input_image_or_video_path = item_fp.replace(".pkl", f".{input_image_or_video_ext}")
+        input_image_or_video_path = item_fp.replace(".cdata", f".{input_image_or_video_ext}")
         if item is None:
             raise ValueError(f"item is None: {item_fp}")
         # t5

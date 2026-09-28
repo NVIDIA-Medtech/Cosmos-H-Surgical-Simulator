@@ -44,6 +44,7 @@ except ImportError:
 
 from cosmos_predict2._src.imaginaire.lazy_config.file_io import PathManager
 from cosmos_predict2._src.imaginaire.lazy_config.registry import _convert_target_to_string
+from cosmos_predict2._src.imaginaire.utils.safe_yaml import load_yaml
 
 __all__ = ["LazyCall", "LazyConfig"]
 
@@ -282,7 +283,9 @@ class LazyConfig:
             ret = module_namespace
         else:
             with PathManager.open(filename) as f:
-                obj = yaml.unsafe_load(f)
+                obj = load_yaml(f)
+            if not isinstance(obj, dict) or not all(isinstance(key, str) for key in obj):
+                raise ValueError("YAML configuration must be a mapping with string keys")
             ret = OmegaConf.create(obj, flags={"allow_objects": True})
 
         if has_keys:

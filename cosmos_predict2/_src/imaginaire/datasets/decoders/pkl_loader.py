@@ -13,21 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import pickle
-import re
-from typing import Optional
+"""Legacy import compatibility; executable pickle payloads are rejected."""
 
+from cosmos_predict2._src.imaginaire.datasets.webdataset.decoders.data import data_decoder
 
-def pkl_decoder(key: str, data: bytes) -> Optional[dict]:
-    r"""
-    Function to decode a pkl file.
-    Args:
-        key: Data key.
-        data: Data dict.
-    """
-    extension = re.sub(r".*[.]", "", key)
-    if extension == "pkl":
-        data_dict = pickle.loads(data)
-        return data_dict
-    else:
-        return None
+pkl_decoder = data_decoder

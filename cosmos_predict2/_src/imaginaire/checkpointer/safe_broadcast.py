@@ -15,11 +15,12 @@
 
 import collections
 import io
-import pickle
 from typing import Any
 
 import torch
 import torch.distributed as dist
+
+from cosmos_predict2._src.imaginaire.utils.checkpoint_loading import load_weights, normalize_checkpoint_state
 
 # https://github.com/pytorch/pytorch/blob/main/torch/distributed/optim/zero_redundancy_optimizer.py#L29
 
@@ -49,8 +50,9 @@ def broadcast_object(
     """
     if dist.get_rank() == src_rank:
         # Send the object
+        obj = normalize_checkpoint_state(obj)
         buffer = io.BytesIO()
-        torch.save(obj, buffer, pickle_protocol=pickle.HIGHEST_PROTOCOL)
+        torch.save(obj, buffer, pickle_protocol=2)
         data = bytearray(buffer.getbuffer())
         length_tensor = torch.LongTensor([len(data)]).to(device)
         data_send_tensor = torch.ByteTensor(data).to(device)
@@ -63,7 +65,7 @@ def broadcast_object(
         data_recv_tensor = torch.empty([int(length_tensor.item())], dtype=torch.uint8, device=device)
         dist.broadcast(data_recv_tensor, src=src_rank, group=group, async_op=False)
         buffer = io.BytesIO(data_recv_tensor.cpu().numpy())
-        obj = torch.load(buffer, map_location=device, weights_only=False)
+        obj = load_weights(buffer, map_location=device)
     return obj
 
 

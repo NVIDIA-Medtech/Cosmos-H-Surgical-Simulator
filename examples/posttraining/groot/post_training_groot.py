@@ -188,7 +188,8 @@ class PostTrainGroot:
         # Move video files
         source_videos = f"{self.hf_download_dir}/gr1"
         if os.path.exists(source_videos):
-            run(["sh", "-c", f"mv {source_videos}/*.mp4 {self.videos_dir}/"], shell=False)
+            for video in Path(source_videos).glob("*.mp4"):
+                shutil.move(str(video), self.videos_dir)
             print(f"Moved videos to {self.videos_dir}")
 
         # Move metadata.csv
@@ -253,22 +254,21 @@ class PostTrainGroot:
         # Set up environment
         self.setup_environment_variables()
 
-        # Build training command
-        base_cmd = "torchrun --nproc_per_node=8 --master_port=12341"
-        script = "-m scripts.train"
-        config = "--config=cosmos_predict2/_src/predict2/configs/video2world/config.py"
-
-        # Build command parts for better readability
-        cmd_parts = [
-            f"{base_cmd} {script} {config} --",
+        command = [
+            "torchrun",
+            "--nproc_per_node=8",
+            "--master_port=12341",
+            "-m",
+            "scripts.train",
+            "--config=cosmos_predict2/_src/predict2/configs/video2world/config.py",
+            "--",
             f"experiment={self.experiment_name}",
             f"trainer.max_iter={self.max_iters}",
             f"checkpoint.save_iter={self.checkpoint_save_iter}",
             "job.wandb_mode=disabled",
             f"job.name={self.job_name}",
         ]
-        command = " ".join(cmd_parts)
-        run(command, shell=True)
+        run(command)
         print("Training completed.")
         self.pipeline_state["training_completed"] = True
         return self

@@ -21,7 +21,7 @@ import torch
 from peft import LoraConfig, set_peft_model_state_dict
 
 from cosmos_predict2._src.imaginaire.config import Config
-from cosmos_predict2._src.imaginaire.flags import INTERNAL, SMOKE
+from cosmos_predict2._src.imaginaire.flags import SMOKE
 from cosmos_predict2._src.imaginaire.lazy_config import instantiate
 from cosmos_predict2._src.imaginaire.model import ImaginaireModel
 from cosmos_predict2._src.imaginaire.utils import distributed, log, misc
@@ -225,7 +225,7 @@ def load_model_state_dict_from_checkpoint(
         # Load on rank0 only and broadcast
         if distributed.is_rank0():
             log.info(f"Loading model cached locally from {local_s3_ckpt_fp}")
-            local_state_dict = easy_io.load(local_s3_ckpt_fp, weights_only=INTERNAL)
+            local_state_dict = easy_io.load(local_s3_ckpt_fp, weights_only=True)
 
             # Handle LoRA key mapping if the model uses LoRA and checkpoint is in .pt format
             if (

@@ -17,19 +17,30 @@ from datetime import datetime
 
 import gradio as gr
 
+from cosmos_gradio.file_access import configure_file_serving, snapshot_path
 from cosmos_gradio.gradio_app.gradio_file_server import file_server_components
 from cosmos_gradio.gradio_app.gradio_log_file_viewer import log_file_viewer
 from cosmos_gradio.gradio_app.util import get_git_info
+from cosmos_gradio.security import AccessPolicy, protected
 
 
-def create_gradio_UI(infer_func, header, default_request, help_text, uploads_dir, output_dir, log_file):
+def create_gradio_UI(
+    infer_func, header, default_request, help_text, uploads_dir, output_dir, log_file, access_policy=None
+):
+    access_policy = access_policy or AccessPolicy.from_environment()
+    configure_file_serving()
+
+    def infer_with_snapshot(value):
+        media, status = infer_func(value)
+        return (snapshot_path(output_dir, media) if media else None), status
+
     with gr.Blocks(title=header, theme=gr.themes.Soft()) as interface:
         gr.Markdown(f"# {header}")
         gr.Markdown(f"instance created {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}: {get_git_info()}")
         gr.Markdown("Upload a media file. Use the resulting server file path as input media in the json request.")
 
         with gr.Row():
-            file_server_components(uploads_dir, open=False)
+            file_server_components(uploads_dir, open=False, access_policy=access_policy)
 
         gr.Markdown("---")
         gr.Markdown(f"**Output Directory**: {output_dir}")
@@ -54,10 +65,10 @@ def create_gradio_UI(infer_func, header, default_request, help_text, uploads_dir
                 status_text = gr.Textbox(label="Status", lines=5, interactive=False)
                 generate_btn = gr.Button("Generate Video", variant="primary", size="lg")
 
-        log_file_viewer(log_file=log_file, num_lines=100, update_interval=1)
+        log_file_viewer(log_file=log_file, num_lines=100, update_interval=1, access_policy=access_policy)
 
         generate_btn.click(
-            fn=infer_func,
+            fn=protected(infer_with_snapshot, access_policy, "generate"),
             inputs=[request_input],
             outputs=[output_video, status_text],
             api_name="generate_video",

@@ -35,7 +35,9 @@ class NumpyHandler(BaseFileHandler):
         Returns:
             numpy.ndarray: The loaded NumPy array.
         """
-        return np.load(file, **kwargs)
+        if kwargs.pop("allow_pickle", False) is not False:
+            raise ValueError("Object arrays are disabled")
+        return np.load(file, allow_pickle=False, **kwargs)
 
     def load_from_path(self, filepath: str, **kwargs) -> Any:
         """
@@ -62,7 +64,7 @@ class NumpyHandler(BaseFileHandler):
             str: The serialized NumPy array as a string.
         """
         with BytesIO() as f:
-            np.save(f, obj, **kwargs)
+            self.dump_to_fileobj(obj, f, **kwargs)
             return f.getvalue()
 
     def dump_to_fileobj(self, obj: np.ndarray, file: IO[bytes], **kwargs):
@@ -74,7 +76,9 @@ class NumpyHandler(BaseFileHandler):
             file (IO[bytes]): The file-like object to which the array is dumped.
             **kwargs: Additional keyword arguments passed to `np.save`.
         """
-        np.save(file, obj, **kwargs)
+        if kwargs.pop("allow_pickle", False) is not False:
+            raise ValueError("Object arrays are disabled")
+        np.save(file, obj, allow_pickle=False, **kwargs)
 
     def dump_to_path(self, obj: np.ndarray, filepath: str, **kwargs):
         """
@@ -86,4 +90,4 @@ class NumpyHandler(BaseFileHandler):
             **kwargs: Additional keyword arguments passed to `np.save`.
         """
         with open(filepath, "wb") as f:
-            np.save(f, obj, **kwargs)
+            self.dump_to_fileobj(obj, f, **kwargs)

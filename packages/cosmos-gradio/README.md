@@ -94,10 +94,20 @@ Alternatively, create your own UI that delivers a JSON-based dictionary of infer
 
 Finally, launch the gradio interface on the desired port:
 ```python
-interface.launch(server_name="0.0.0.0", server_port=8080)
+from cosmos_gradio.security import AccessPolicy, launch_options
+
+interface.launch(**launch_options(AccessPolicy.from_environment()))
 ```
 
 ## Running the server
+
+Set `COSMOS_GRADIO_USERNAME` and `COSMOS_GRADIO_PASSWORD_FILE` to a mounted secret
+containing a unique password of at least 16 characters. Startup fails without credentials.
+The default listener is loopback. For container port forwarding or remote binding,
+set `GRADIO_SERVER_NAME` and both `GRADIO_SSL_CERTFILE` / `GRADIO_SSL_KEYFILE`.
+See [security migration](../../docs/security-migration.md) for the operator access model.
+Python clients must pass `auth=(username, password)` to `gradio_client.Client`.
+
 
 The Cosmos-Gradio is run in your models environment as a dependency. E.g. if your model requires a docker to run your model:
 

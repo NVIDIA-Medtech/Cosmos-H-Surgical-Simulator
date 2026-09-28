@@ -65,14 +65,7 @@ class DeploymentEnv(BaseSettings):
 
     @property
     def allowed_paths(self) -> list[str]:
-        """
-        Returns list of paths allowed for Gradio file serving.
-        Includes output_dir, uploads_dir, and log_file directory.
-        """
-        import os
+        """Only private snapshots may be served directly over HTTP."""
+        from cosmos_gradio.file_access import configure_file_serving
 
-        paths = [self.output_dir, self.uploads_dir]
-        log_file_dir = os.path.dirname(self.log_file)
-        if log_file_dir:
-            paths.append(log_file_dir)
-        return paths
+        return configure_file_serving()

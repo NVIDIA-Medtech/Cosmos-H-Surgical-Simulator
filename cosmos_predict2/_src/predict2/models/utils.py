@@ -104,7 +104,7 @@ def load_state_dict_from_bin(file_path, torch_dtype=None, s3_credential_path=Non
         {"backend": "s3", "s3_credential_path": s3_credential_path} if file_path.startswith("s3://") else None
     )
     state_dict = easy_io.load(
-        file_path, backend_args=backend_args, file_format="pt", map_location="cpu", weights_only=False
+        file_path, backend_args=backend_args, file_format="pt", map_location="cpu", weights_only=True
     )
     if torch_dtype is not None:
         for i in state_dict:

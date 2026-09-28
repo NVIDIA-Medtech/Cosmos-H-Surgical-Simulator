@@ -41,7 +41,9 @@ COPY --from=ghcr.io/astral-sh/uv:0.8.12 /uv /uvx /usr/local/bin/
 # Copy from the cache instead of linking since it's a mounted volume
 ENV UV_LINK_MODE=copy
 # Ensure installed tools can be executed out of the box
-ENV UV_TOOL_BIN_DIR=/usr/local/bin
+ENV UV_TOOL_BIN_DIR=/home/cosmos/.local/bin
+# Managed Python must remain accessible after dropping root.
+ENV UV_PYTHON_INSTALL_DIR=/opt/uv/python
 
 # Install just: https://just.systems/man/en/pre-built-binaries.html
 RUN curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash -s -- --to /usr/local/bin --tag 1.42.4
@@ -64,8 +66,19 @@ ARG STANDALONE
 RUN --mount=type=bind,source=.,target=/tmp/workspace \
    if [ "$STANDALONE" = "true" ] ; then cp -r /tmp/workspace/* /workspace && just install && rm -rf /workspace/.git ; else echo "Run just install to install all the dependencies at runtime" ; fi
 
+# Build as root, then hand writable application paths to the runtime user.
+ARG APP_UID=10001
+ARG APP_GID=10001
+RUN --mount=type=bind,source=bin/setup-container-user.sh,target=/tmp/setup-container-user.sh \
+    bash /tmp/setup-container-user.sh "$APP_UID" "$APP_GID" && \
+    chmod -R a+rX /opt/uv/python
+ENV HOME=/home/cosmos
+ENV XDG_CACHE_HOME=/home/cosmos/.cache
+ENV UV_CACHE_DIR=/home/cosmos/.cache/uv
+USER cosmos:cosmos
+
 # Place executables in the environment at the front of the path
-ENV PATH="/workspace/.venv/bin:$PATH"
+ENV PATH="/workspace/.venv/bin:/home/cosmos/.local/bin:$PATH"
 
 ENTRYPOINT ["/workspace/bin/entrypoint.sh"]
 

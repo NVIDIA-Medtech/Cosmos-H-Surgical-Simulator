@@ -18,18 +18,18 @@ from __future__ import annotations
 import io
 import json
 import os
-import pickle
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Optional
 from urllib.parse import urlparse
 
 import numpy as np
 import torch
-import yaml
 from PIL import Image
 
-from cosmos_predict2._src.imaginaire.utils import distributed, log
+from cosmos_predict2._src.imaginaire.utils import distributed, log, safe_data
+from cosmos_predict2._src.imaginaire.utils.checkpoint_loading import load_weights, save_weights
 from cosmos_predict2._src.imaginaire.utils.easy_io import easy_io
+from cosmos_predict2._src.imaginaire.utils.safe_yaml import dump_yaml, load_yaml
 
 Image.MAX_IMAGE_PIXELS = None
 
@@ -85,7 +85,7 @@ class ObjectStore:
                 - "torch.jit": A JIT-compiled TorchScript model, loaded with torch.jit.load().
                 - "image": Image objects, opened with PIL.Image.open().
                 - "json": JSON files, opened with json.load().
-                - "pickle": Picklable objects, opened with pickle.load().
+                - "data": Non-executable numeric arrays and containers in a .cdata archive.
                 - "yaml": YAML files, opened with yaml.safe_load().
                 - "text": Pure text files.
                 - "numpy": Numpy arrays, opened with np.load().
@@ -103,7 +103,7 @@ class ObjectStore:
 
         # Read from buffer for common data types.
         if type == "torch":
-            return torch.load(buffer, map_location=lambda storage, loc: storage, weights_only=False)
+            return load_weights(buffer, map_location="cpu")
         elif type == "torch.jit":
             return torch.jit.load(buffer)
         elif type == "image":
@@ -118,13 +118,15 @@ class ObjectStore:
                 data.append(json.loads(line))
             return {"data": data}
         elif type == "pickle":
-            return pickle.load(buffer)
+            raise ValueError("Pickle data is disabled. Migrate trusted artifacts to type=data offline.")
+        elif type == "data":
+            return safe_data.load(buffer)
         elif type == "yaml":
-            return yaml.safe_load(buffer)
+            return load_yaml(buffer)
         elif type == "text":
             return buffer.read().decode(encoding)
         elif type == "numpy":
-            return np.load(buffer, allow_pickle=True)
+            return np.load(buffer, allow_pickle=False)
         # Read from buffer as raw bytes.
         elif type == "bytes":
             return buffer.read()
@@ -146,7 +148,7 @@ class ObjectStore:
                 - "torch.jit": A JIT-compiled TorchScript model, exported with torch.jit.save().
                 - "image": Image objects, saved with PIL.Image.save().
                 - "json": JSON files, saved with json.dumps().
-                - "pickle": Picklable objects, saved with pickle.dump().
+                - "data": Non-executable numeric arrays and containers in a .cdata archive.
                 - "yaml": YAML files, saved with yaml.safe_dump().
                 - "text": Pure text files.
                 - "numpy": Numpy arrays, saved with np.save().
@@ -158,7 +160,7 @@ class ObjectStore:
         with io.BytesIO() as buffer:
             # Write to buffer for common data types.
             if type == "torch":
-                torch.save(object, buffer)
+                save_weights(object, buffer)
             elif type == "torch.jit":
                 torch.jit.save(object, buffer)
             elif type == "image":
@@ -167,9 +169,11 @@ class ObjectStore:
             elif type == "json":
                 buffer.write(json.dumps(object).encode(encoding))
             elif type == "pickle":
-                pickle.dump(object, buffer)
+                raise ValueError("Pickle output is disabled. Use type=data.")
+            elif type == "data":
+                safe_data.dump(object, buffer)
             elif type == "yaml":
-                buffer.write(yaml.safe_dump(object).encode(encoding))
+                buffer.write(dump_yaml(object).encode(encoding))
             elif type == "text":
                 buffer.write(object.encode(encoding))
             elif type == "numpy":

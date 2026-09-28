@@ -13,9 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import pickle
-from io import BytesIO
-from typing import Any
+"""Compatibility entry point: legacy pickle data must be migrated offline."""
 
 from cosmos_predict2._src.imaginaire.utils.easy_io.handlers.base import BaseFileHandler
 
@@ -23,20 +21,17 @@ from cosmos_predict2._src.imaginaire.utils.easy_io.handlers.base import BaseFile
 class PickleHandler(BaseFileHandler):
     str_like = False
 
-    def load_from_fileobj(self, file: BytesIO, **kwargs):
-        return pickle.load(file, **kwargs)
+    def load_from_fileobj(self, file, **kwargs):
+        raise ValueError("Pickle data is disabled. Regenerate or migrate trusted artifacts to .cdata offline.")
 
     def load_from_path(self, filepath, **kwargs):
-        return super().load_from_path(filepath, mode="rb", **kwargs)
-
-    def dump_to_str(self, obj, **kwargs):
-        kwargs.setdefault("protocol", 2)
-        return pickle.dumps(obj, **kwargs)
-
-    def dump_to_fileobj(self, obj: Any, file: BytesIO, **kwargs):
-        kwargs.setdefault("protocol", 2)
-        pickle.dump(obj, file, **kwargs)
+        return self.load_from_fileobj(None, **kwargs)
 
     def dump_to_path(self, obj, filepath, **kwargs):
-        with open(filepath, "wb") as f:
-            pickle.dump(obj, f, **kwargs)
+        return self.dump_to_fileobj(obj, None, **kwargs)
+
+    def dump_to_fileobj(self, obj, file, **kwargs):
+        raise ValueError("Pickle output is disabled. Use .cdata for numeric arrays and data containers.")
+
+    def dump_to_str(self, obj, **kwargs):
+        raise ValueError("Pickle output is disabled. Use .cdata.")

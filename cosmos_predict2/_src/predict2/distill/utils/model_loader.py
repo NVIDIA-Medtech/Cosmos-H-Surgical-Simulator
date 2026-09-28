@@ -21,6 +21,7 @@ import torch.distributed.checkpoint as dcp
 
 from cosmos_predict2._src.imaginaire.lazy_config import instantiate
 from cosmos_predict2._src.imaginaire.utils import log, misc
+from cosmos_predict2._src.imaginaire.utils.checkpoint_loading import load_weights
 from cosmos_predict2._src.imaginaire.utils.config_helper import get_config_module, override
 from cosmos_predict2._src.imaginaire.utils.easy_io import easy_io
 from cosmos_predict2._src.predict2.distill.checkpointer.dcp import (
@@ -138,7 +139,7 @@ def load_model_state_dict_from_checkpoint(
         log.info(f"Loading model cached locally from {local_s3_ckpt_fp}")
         # `strict=False` is needed to avoid errors: `Skipping key ... introduced by TransformerEngine for FP8 in the checkpoint.`
         # Use direct torch.load instead of easy_io.load for better performance with large checkpoints
-        state_dict = torch.load(local_s3_ckpt_fp, map_location="cpu", weights_only=False)
+        state_dict = load_weights(local_s3_ckpt_fp, map_location="cpu")
         model.load_state_dict(state_dict, strict=False)
     else:
         log.info(f"Loading model from s3 {s3_checkpoint_dir}")

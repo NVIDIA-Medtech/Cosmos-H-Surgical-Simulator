@@ -13,8 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from pathlib import Path
+
 import gradio as gr
 from loguru import logger
+
+from cosmos_gradio.file_access import snapshot_path
+from cosmos_gradio.security import AccessPolicy, protected
 
 
 def _tail_file(file_path: str, num_lines: int) -> str:
@@ -58,6 +63,7 @@ def log_file_viewer(
     log_file: str,
     num_lines: int = 100,
     update_interval: float = 1,
+    access_policy=None,
 ) -> gr.Textbox:
     """
     Gradio component that renders the final `num_lines` lines of a log file, updating periodically.
@@ -71,25 +77,31 @@ def log_file_viewer(
         gr.Textbox: Textbox component that displays the tail of the log file.
     """
 
+    access_policy = access_policy or AccessPolicy.from_environment()
+
     def _tail_logs() -> str:
         return _tail_file(log_file, num_lines)
 
     def _download_log() -> str:
         """Return log file path for download - called on button click."""
         logger.info(f"Downloading log file: {log_file}")
-        return log_file
+        return snapshot_path(Path(log_file).absolute().parent, log_file)
 
     # Use timer.tick() to update the log file, as gr.Textbox(every=...) reveals the API endpoint.
     with gr.Group():
         timer = gr.Timer(value=update_interval, active=True)
-        logs = gr.Textbox(label="Logs", interactive=False, lines=30, autoscroll=True, value=_tail_logs())
+        logs = gr.Textbox(label="Logs", interactive=False, lines=30, autoscroll=True, value="")
 
         # upon setting the log file to the file component, the log file is copied to a internal gradio cache directory
         # therefore we don't want to update the file automatically by timer.tick()
         download_btn = gr.Button("Prepare Log File for Download", variant="secondary", size="sm")
         log_file_output = gr.File(label="Log File", visible=True)
 
-        download_btn.click(fn=_download_log, outputs=log_file_output, api_name=None)
-        timer.tick(fn=_tail_logs, outputs=logs, api_name=None)
+        download_btn.click(
+            fn=protected(_download_log, access_policy, "logs", takes_input=False),
+            outputs=log_file_output,
+            api_name=None,
+        )
+        timer.tick(fn=protected(_tail_logs, access_policy, "logs", takes_input=False), outputs=logs, api_name=None)
 
     return logs

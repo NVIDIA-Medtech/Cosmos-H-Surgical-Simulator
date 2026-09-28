@@ -38,6 +38,7 @@ import typing
 
 import gradio_client.client as gradio_client
 import gradio_client.utils as gradio_utils
+from cosmos_gradio.security import AccessPolicy
 from loguru import logger
 
 
@@ -65,7 +66,8 @@ def _sync_example(url: str, input_video_path: str):
     logger.info("--------------------------------")
     logger.info("Synchronous inference with file on server")
 
-    client = gradio_client.Client(url)
+    policy = AccessPolicy.from_environment()
+    client = gradio_client.Client(url, auth=(policy.username, policy.password))
 
     request_dict = _request(input_video_path=input_video_path)
     request_text = json.dumps(request_dict)
@@ -88,7 +90,8 @@ def _sync_with_upload_example(url: str, input_video_path: str):
     logger.info("--------------------------------")
     logger.info("Synchronous inference with local file")
 
-    client = gradio_client.Client(url)
+    policy = AccessPolicy.from_environment()
+    client = gradio_client.Client(url, auth=(policy.username, policy.password))
 
     # Upload the local file to the server and get the remote path
     file_descriptor = gradio_utils.handle_file(input_video_path)
@@ -119,7 +122,8 @@ def _async_example(url: str, input_video_path: str):
     logger.info("--------------------------------")
     logger.info("Asynchronous inference with file on server")
 
-    client = gradio_client.Client(url)
+    policy = AccessPolicy.from_environment()
+    client = gradio_client.Client(url, auth=(policy.username, policy.password))
 
     request_dict = _request(input_video_path=input_video_path)
     request_text = json.dumps(request_dict)
@@ -144,7 +148,8 @@ def _async_with_upload_example(url: str, input_video_path: str):
     logger.info("--------------------------------")
     logger.info("Asynchronous inference with local file")
 
-    client = gradio_client.Client(url)
+    policy = AccessPolicy.from_environment()
+    client = gradio_client.Client(url, auth=(policy.username, policy.password))
 
     # Upload the local file to the server, wait for job to complete, and get the remote path
     file_descriptor = gradio_utils.handle_file(input_video_path)

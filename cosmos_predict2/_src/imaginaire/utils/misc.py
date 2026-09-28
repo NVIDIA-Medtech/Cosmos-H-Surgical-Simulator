@@ -629,8 +629,8 @@ class StragglerDetectorV2:
                         f"s3://rundir/{self.__class__.__name__}/iter_{iteration:09d}.yaml",
                     )
                     easy_io.dump(
-                        report,
-                        f"s3://rundir/{self.__class__.__name__}/report_iter_{iteration:09d}.pkl",
+                        {"report": str(report)},
+                        f"s3://rundir/{self.__class__.__name__}/report_iter_{iteration:09d}.json",
                     )
 
                 # Which GPUs are slower than other GPUs, based on the execution time of kernels

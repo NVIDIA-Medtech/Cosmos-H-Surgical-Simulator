@@ -33,6 +33,7 @@ from cosmos_predict2._src.imaginaire.datasets.webdataset.config.schema import (
     TarSample,
     Wdinfo,
 )
+from cosmos_predict2._src.imaginaire.datasets.webdataset.decoders.data import data_decoder
 from cosmos_predict2._src.imaginaire.datasets.webdataset.utils.iterators import WebDataset
 from cosmos_predict2._src.imaginaire.datasets.webdataset.utils.misc import (
     remove_extensions_from_keys,
@@ -253,7 +254,7 @@ class Dataset:
         # Adding decoders
         # Decoders are functions that decode the input IO stream
         decoder_list = getattr(self.config, "decoders", [])
-        decoder_functions = []
+        decoder_functions = [data_decoder]
         for decoder in decoder_list:
             # If the specified decoder is a string, use the webdataset decoder
             # If its a callable function, use the defined function to decode data

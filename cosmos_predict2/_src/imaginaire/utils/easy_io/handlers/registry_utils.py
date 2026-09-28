@@ -15,6 +15,7 @@
 from cosmos_predict2._src.imaginaire.utils.easy_io.handlers.base import BaseFileHandler
 from cosmos_predict2._src.imaginaire.utils.easy_io.handlers.byte_handler import ByteHandler
 from cosmos_predict2._src.imaginaire.utils.easy_io.handlers.csv_handler import CsvHandler
+from cosmos_predict2._src.imaginaire.utils.easy_io.handlers.data_handler import DataHandler
 from cosmos_predict2._src.imaginaire.utils.easy_io.handlers.gzip_handler import GzipHandler
 from cosmos_predict2._src.imaginaire.utils.easy_io.handlers.imageio_video_handler import ImageioVideoHandler
 from cosmos_predict2._src.imaginaire.utils.easy_io.handlers.json_handler import JsonHandler
@@ -31,6 +32,7 @@ from cosmos_predict2._src.imaginaire.utils.easy_io.handlers.yaml_handler import 
 
 file_handlers = {
     "json": JsonHandler(),
+    "cdata": DataHandler(),
     "yaml": YamlHandler(),
     "yml": YamlHandler(),
     "pickle": PickleHandler(),

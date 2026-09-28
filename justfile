@@ -136,17 +136,18 @@ release pypi_token='dry-run' *args:
 # Run the docker container
 _docker build_args='' run_args='':
   #!/usr/bin/env bash
-  set -euxo pipefail
-  docker build {{build_args}} .
-  image_tag=$(docker build {{build_args}} -q .)
+  set -euo pipefail
+  image_tag=$(docker build --build-arg APP_UID="$(id -u)" --build-arg APP_GID="$(id -g)" {{build_args}} -q .)
   docker run \
     -it \
     --runtime=nvidia \
     --ipc=host \
     --rm \
+    --cap-drop=ALL \
+    --security-opt=no-new-privileges \
     -v .:/workspace \
     -v /workspace/.venv \
-    -v /root/.cache:/root/.cache \
+    -v cosmos-cache:/home/cosmos/.cache \
     -e HF_TOKEN="$HF_TOKEN" \
     {{run_args}} \
     $image_tag

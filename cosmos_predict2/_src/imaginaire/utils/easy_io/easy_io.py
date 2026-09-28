@@ -934,7 +934,7 @@ def load(
     backend_key: Optional[str] = None,
     **kwargs,
 ):
-    """Load data from json/yaml/pickle files.
+    """Load data from json/yaml/safe data files.
 
     This method provides a unified api for loading data from serialized files.
 
@@ -947,7 +947,7 @@ def load(
         file_format (str, optional): If not specified, the file format will be
             inferred from the file extension, otherwise use the specified one.
             Currently supported formats include "json", "yaml/yml" and
-            "pickle/pkl".
+            "cdata". Legacy pickle/pkl loading is disabled.
         file_client_args (dict, optional): Arguments to instantiate a
             FileClient. See :class:`mmengine.fileio.FileClient` for details.
             Defaults to None. It will be deprecated in future. Please use
@@ -1029,7 +1029,7 @@ def dump(
     backend_key: Optional[str] = None,
     **kwargs,
 ):
-    """Dump data to json/yaml/pickle strings or files.
+    """Dump data to json/yaml/safe data strings or files.
 
     This method provides a unified api for dumping data as strings or to files,
     and also supports custom arguments for each file format.

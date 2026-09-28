@@ -18,6 +18,7 @@ import json
 
 import gradio_client.client as gradio_client
 import gradio_client.utils as gradio_utils
+from cosmos_gradio.security import AccessPolicy
 from loguru import logger
 from PIL import Image
 
@@ -53,7 +54,8 @@ def upload_file_list(client, assets: list[str]):
 
 
 if __name__ == "__main__":
-    client = gradio_client.Client(url)
+    policy = AccessPolicy.from_environment()
+    client = gradio_client.Client(url, auth=(policy.username, policy.password))
     logger.info(f"Available APIs: {client.view_api()}")
 
     create_sample_assets()

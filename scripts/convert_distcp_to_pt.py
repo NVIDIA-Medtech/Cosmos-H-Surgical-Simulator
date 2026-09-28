@@ -30,12 +30,16 @@
 # explicit = true
 # ///
 
-"""Download distributed checkpoint from S3 and convert to pytorch checkpoint.
+"""Convert an independently verified, trusted distributed checkpoint.
+
+Distributed checkpoint metadata is executable pickle. Run this offline conversion
+in an isolated environment without credentials or network access when possible.
+The restricted output loader does not protect the distributed input format.
 
 Usage:
 
 ```python
-./scripts/convert_distcp_to_pt.py "s3://bucket/cosmos_predict2_multiview/cosmos2_mv/buttercup_predict2p5_2b_mv_7views_res720p_fps30_t8_from16kfps10mv_jointalpamayov2mads720pmulticaps29frames-0/checkpoints/iter_000028000" "checkpoints/buttercup_predict2p5_2b_mv_7views_res720p_fps30_t8_from16kfps10mv_jointalpamayov2mads720pmulticaps29frames-0_iter_000028000"
+./scripts/convert_distcp_to_pt.py "s3://bucket/cosmos_predict2_multiview/cosmos2_mv/buttercup_predict2p5_2b_mv_7views_res720p_fps30_t8_from16kfps10mv_jointalpamayov2mads720pmulticaps29frames-0/checkpoints/iter_000028000" "checkpoints/buttercup_predict2p5_2b_mv_7views_res720p_fps30_t8_from16kfps10mv_jointalpamayov2mads720pmulticaps29frames-0_iter_000028000" --trust-checkpoint
 ```
 """
 
@@ -49,6 +53,8 @@ import torch
 import tyro
 from torch.distributed.checkpoint.format_utils import dcp_to_torch_save
 
+from cosmos_predict2._src.imaginaire.utils.checkpoint_loading import load_weights
+
 
 @dataclass(frozen=True, kw_only=True)
 class Args:
@@ -59,10 +65,21 @@ class Args:
 
     ema: bool = True
     """Export EMA weights."""
+    trust_checkpoint: bool = False
+    """Confirm independently verified input provenance; DCP metadata can execute code.
+    Never enable for an unknown checkpoint. This is not a safety check or sandbox.
+    """
 
 
 def main():
     args = tyro.cli(Args, description=__doc__)
+
+    if not args.trust_checkpoint:
+        raise ValueError(
+            "Distributed checkpoint metadata can execute code. Verify input provenance and use "
+            "--trust-checkpoint only for trusted offline conversion in an isolated environment."
+        )
+    args.output_dir.mkdir(parents=True, exist_ok=True)
 
     pt_path = args.output_dir / "model.pt"
     pt_path.unlink(missing_ok=True)
@@ -108,7 +125,7 @@ def main():
         return
 
     # Drop Reg keys and save EMA weights only in fp32 precision
-    state_dict: dict[str, Any] = torch.load(pt_path, map_location="cpu", weights_only=False)
+    state_dict: dict[str, Any] = load_weights(pt_path, map_location="cpu")
     state_dict_ema_fp32: dict[str, Any] = {}
     for key, value in state_dict.items():
         if key.startswith("net_ema."):

@@ -19,6 +19,6 @@
 
 set -e
 
-pip install --no-deps -e . || true
+pip install --no-deps -e .
 
 exec "$@"

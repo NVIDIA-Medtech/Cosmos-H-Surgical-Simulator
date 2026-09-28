@@ -79,21 +79,31 @@ Build the container:
 
 ```bash
 # Ampere - Hopper
-image_tag=$(docker build -f Dockerfile -q .)
+image_tag=$(docker build --build-arg APP_UID="$(id -u)" --build-arg APP_GID="$(id -g)" -f Dockerfile -q .)
 # Blackwell
-image_tag=$(docker build -f docker/nightly.Dockerfile -q .)
+image_tag=$(docker build --build-arg APP_UID="$(id -u)" --build-arg APP_GID="$(id -g)" -f docker/nightly.Dockerfile -q .)
 ```
 
 Run the container:
 
 ```bash
-docker run -it --runtime=nvidia --ipc=host --rm -v .:/workspace -v /workspace/.venv -v /root/.cache:/root/.cache -e HF_TOKEN="$HF_TOKEN" $image_tag
+docker run -it --runtime=nvidia --ipc=host --rm --cap-drop=ALL --security-opt=no-new-privileges -v .:/workspace -v /workspace/.venv -v cosmos-cache:/home/cosmos/.cache -e HF_TOKEN="$HF_TOKEN" $image_tag
 ```
+
+The default image user is `cosmos` (UID/GID 10001). The build arguments above match
+its IDs to your non-root host account so bind-mounted source, checkpoints, datasets,
+and output directories remain accessible. Build/run as a non-root host account;
+UID/GID 0 is rejected. Existing cache/venv volumes must have matching ownership or
+be replaced with fresh volumes. The entrypoint fails if dependency installation
+fails; it never falls back to running with an incomplete environment. Standalone
+images (`--build-arg STANDALONE=true`) also run as this user. NVIDIA device access
+is still supplied by the container runtime; grant required device groups explicitly
+if your host restricts GPU devices. Do not work around permission errors with root.
 
 Optional arguments:
 
 * `--ipc=host`: Use host system's shared memory, since parallel torchrun consumes a large amount of shared memory. If not allowed by security policy, increase `--shm-size` ([documentation](https://docs.docker.com/engine/containers/run/#runtime-constraints-on-resources)).
-* `-v /root/.cache:/root/.cache`: Mount host cache to avoid re-downloading cache entries.
+* `-v cosmos-cache:/home/cosmos/.cache`: Use a named cache volume owned by the image application user.
 * `-e HF_TOKEN="$HF_TOKEN"`: Set Hugging Face token to avoid re-authenticating.
 
 If you get `docker: Error response from daemon: unknown or invalid runtime name: nvidia`, you need to [configure docker](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html#configuring-docker):

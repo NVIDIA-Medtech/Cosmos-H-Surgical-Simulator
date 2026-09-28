@@ -13,15 +13,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import datetime
 import json
 import os
 import shutil
+import tempfile
 import typing
+from pathlib import Path
 from typing import Any
 
 import gradio as gr
 from loguru import logger
+
+from cosmos_gradio.file_access import configure_file_serving, media_snapshot, open_confined, read_text, snapshot_path
+from cosmos_gradio.security import AccessPolicy, launch_options, protected
 
 VIDEO_EXTENSION = typing.Literal[".mp4", ".avi", ".mov", ".mkv", ".webm"]
 IMAGE_EXTENSION = typing.Literal[".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp"]
@@ -39,9 +43,12 @@ def _get_files_in_output_dir(output_dir: str):
         return []
 
     files = []
-    for root, _, filenames in os.walk(output_dir):
+    for root, directories, filenames in os.walk(output_dir, followlinks=False):
+        directories[:] = [name for name in directories if not Path(root, name).is_symlink()]
         for filename in filenames:
             filepath = os.path.join(root, filename)
+            if Path(filepath).is_symlink() or not Path(filepath).is_file():
+                continue
             files.append(
                 {
                     "path": filepath,
@@ -111,10 +118,7 @@ def _handle_api_file_upload_event(file: str, upload_dir: str) -> str:
 def _handle_api_file_upload_event_list(files: list[Any], upload_dir: str) -> str:
     try:
         responses = []
-        # Create timestamped subfolder
-        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        upload_folder = os.path.join(upload_dir, f"upload_{timestamp}")
-        os.makedirs(upload_folder, exist_ok=True)
+        upload_folder = tempfile.mkdtemp(prefix="upload_", dir=upload_dir)
 
         for file in files:
             if file is None:
@@ -126,7 +130,7 @@ def _handle_api_file_upload_event_list(files: list[Any], upload_dir: str) -> str
             shutil.copy2(file.name, dest_path)
             logger.info(f"File uploaded to: {dest_path}")
 
-            response = {"path": dest_path}
+            response = {"path": dest_path, "download_path": snapshot_path(upload_dir, dest_path)}
             logger.info(f"{response=}")
             responses.append(response)
 
@@ -145,10 +149,7 @@ def _handle_file_upload_event(temp_files, output_dir: str):
         return "", "No files selected.", gr.Dropdown()
 
     try:
-        # Create timestamped subfolder
-        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        upload_folder = os.path.join(output_dir, f"upload_{timestamp}")
-        os.makedirs(upload_folder, exist_ok=True)
+        upload_folder = tempfile.mkdtemp(prefix="upload_", dir=output_dir)
 
         uploaded_paths = []
         for temp_file in temp_files:
@@ -185,7 +186,7 @@ def _handle_file_upload_event(temp_files, output_dir: str):
         return "", f"❌ Upload failed: {e!s}", gr.Dropdown()
 
 
-def _format_files_list(files: list[dict] | None = None, output_dir: str | None = None) -> list[str]:
+def _format_files_list(files: list[dict] | None = None, output_dir: str | None = None) -> list[tuple[str, str]]:
     # pyrefly: ignore  # bad-argument-type
     files = files or _get_files_in_output_dir(output_dir)
 
@@ -193,11 +194,10 @@ def _format_files_list(files: list[dict] | None = None, output_dir: str | None =
         logger.warning("No files in directory.")
         return []
 
-    file_paths = [file["path"] for file in files]
-    file_paths = sorted(file_paths)
-    file_paths = [_format_file_path_with_icon(file_path) for file_path in file_paths]
-
-    return file_paths
+    return [
+        (_format_file_path_with_icon(file["relative_path"]), file["relative_path"])
+        for file in sorted(files, key=lambda entry: entry["relative_path"])
+    ]
 
 
 def _handle_refresh_button_click_event(
@@ -220,12 +220,14 @@ def _view_file_dropdown(
     )
 
 
-def _handle_view_file_dropdown_select_event(selection: str) -> tuple[gr.Video, gr.Image, gr.JSON, gr.Textbox]:
+def _handle_view_file_dropdown_select_event(
+    selection: str, output_dir: str
+) -> tuple[gr.Video, gr.Image, gr.JSON, gr.Textbox]:
     """
     Callback executed when the user selects a file from the dropdown
 
     Args:
-        selection (str): The value of the dropdown that was selected (an icon and file path)
+        selection (str): A relative path inside output_dir
 
     Returns:
         A tuple containing 4 output components: (video, image, json, text). Only one component will be visible,
@@ -240,36 +242,24 @@ def _handle_view_file_dropdown_select_event(selection: str) -> tuple[gr.Video, g
     output_text: gr.Textbox = gr.Textbox(visible=False)
 
     try:
-        # Strip the leading icon from the selected path
-        index_leading_slash = selection.find("/")
-        file_path = selection[index_leading_slash:]
-
-        if not file_path:
-            raise ValueError("No file selected")
-
-        if not os.path.exists(file_path):
-            raise FileNotFoundError(f"File not found: {file_path}")
-
-        # Construct the appropriate output component based on the file type
-        file_type = _get_file_type(file_path)
-        if file_type == "video":
-            output_video = gr.Video(value=file_path, visible=True)
-        elif file_type == "image":
-            output_image = gr.Image(value=file_path, visible=True)
-        elif file_type == "json":
-            with open(file_path, encoding="utf-8") as file:
-                output_json = gr.JSON(value=json.load(file), visible=True)
-        elif file_type == "text":
-            with open(file_path, encoding="utf-8") as file:
-                output_text = gr.Textbox(value=file.read(), visible=True)
-        else:
-            message = f"Unable to display unsupported file type: {file_path}"
-            logger.warning(message)
-            output_text = gr.Textbox(value=message, visible=True)
+        with open_confined(output_dir, selection) as file:
+            file_type = _get_file_type(selection)
+            if file_type in ("video", "image"):
+                snapshot = media_snapshot(file, Path(selection).suffix.lower())
+                if file_type == "video":
+                    output_video = gr.Video(value=snapshot, visible=True)
+                else:
+                    output_image = gr.Image(value=snapshot, visible=True)
+            elif file_type == "json":
+                output_json = gr.JSON(value=json.loads(read_text(file)), visible=True)
+            elif file_type == "text":
+                output_text = gr.Textbox(value=read_text(file), visible=True)
+            else:
+                output_text = gr.Textbox(value="Unsupported file type", visible=True)
 
     # Handle errors by displaying the message in the textbox
-    except Exception as e:
-        message = f"Error viewing {selection}: {e!s}"
+    except Exception:
+        message = "Unable to view the selected file"
         logger.error(message)
         output_text = gr.Textbox(value=message, visible=True)
 
@@ -303,7 +293,7 @@ def _instructions():
             )
 
 
-def file_server_components(upload_dir: str, open: bool = True) -> gr.Accordion:
+def file_server_components(upload_dir: str, open: bool = True, access_policy=None) -> gr.Accordion:
     """
     Gradio component that allows users to upload files, browse uploads, and view file contents.
 
@@ -315,6 +305,7 @@ def file_server_components(upload_dir: str, open: bool = True) -> gr.Accordion:
         gr.Accordion: The top-level accordion component
     """
 
+    access_policy = access_policy or AccessPolicy.from_environment()
     with gr.Accordion("File Upload and Viewer", open=open) as top_level_accordion:
         with top_level_accordion:
             gr.Markdown(f"**Directory**: `{upload_dir}`")
@@ -375,31 +366,31 @@ def file_server_components(upload_dir: str, open: bool = True) -> gr.Accordion:
 
     # Set up event handlers
     api_upload_file_input.upload(
-        fn=lambda file: _handle_api_file_upload_event(file, upload_dir),
+        fn=protected(lambda file: _handle_api_file_upload_event(file, upload_dir), access_policy, "upload"),
         inputs=[api_upload_file_input],
         outputs=[api_upload_file_response],
         api_name="upload_file",
     )
     api_upload_file_input_list.upload(
-        fn=lambda files: _handle_api_file_upload_event_list(files, upload_dir),
+        fn=protected(lambda files: _handle_api_file_upload_event_list(files, upload_dir), access_policy, "upload"),
         inputs=[api_upload_file_input_list],
         outputs=[api_upload_file_response_list],
         api_name="upload_file_list",
     )
     file_upload.upload(
-        fn=lambda temp_files: _handle_file_upload_event(temp_files, upload_dir),
+        fn=protected(lambda temp_files: _handle_file_upload_event(temp_files, upload_dir), access_policy, "upload"),
         inputs=[file_upload],
         outputs=[upload_status, view_file_dropdown],
         api_name=False,  # UI only component.
     )
     refresh_btn.click(
-        fn=lambda dropdown_value: _handle_refresh_button_click_event(dropdown_value, upload_dir),
+        fn=protected(lambda value: _handle_refresh_button_click_event(value, upload_dir), access_policy, "list"),
         inputs=[view_file_dropdown],
         outputs=[view_file_dropdown],
         api_name=False,  # UI only component.
     )
     view_file_dropdown.select(
-        fn=_handle_view_file_dropdown_select_event,
+        fn=protected(lambda value: _handle_view_file_dropdown_select_event(value, upload_dir), access_policy, "view"),
         inputs=[view_file_dropdown],
         outputs=[output_video, output_image, output_json, output_text],
         api_name=False,  # UI only component.
@@ -408,20 +399,22 @@ def file_server_components(upload_dir: str, open: bool = True) -> gr.Accordion:
     return top_level_accordion
 
 
-def create_gradio_blocks(output_dir: str) -> gr.Blocks:
+def create_gradio_blocks(output_dir: str, access_policy=None) -> gr.Blocks:
+    access_policy = access_policy or AccessPolicy.from_environment()
+    configure_file_serving()
     with gr.Blocks(title="File Upload and Viewer", theme=gr.themes.Soft()) as blocks:
-        file_server_components(output_dir, open=True)
+        file_server_components(output_dir, open=True, access_policy=access_policy)
 
     return blocks
 
 
 if __name__ == "__main__":
     save_dir = os.environ.get("GRADIO_SAVE_DIR", "/mnt/pvc/gradio/uploads")
-    server_name = os.environ.get("GRADIO_SERVER_NAME", "0.0.0.0")
-    server_port = int(os.environ.get("GRADIO_SERVER_PORT", 8080))
+    policy = AccessPolicy.from_environment()
+    options = launch_options(policy)
 
     os.makedirs(save_dir, exist_ok=True)
-    logger.info(f"Starting app - {server_name}:{server_port} -> {save_dir}")
+    logger.info("Starting authenticated file server")
 
-    blocks = create_gradio_blocks(output_dir=save_dir)
-    blocks.launch(server_name=server_name, server_port=server_port, allowed_paths=[save_dir], share=False)
+    blocks = create_gradio_blocks(output_dir=save_dir, access_policy=policy)
+    blocks.launch(**options)

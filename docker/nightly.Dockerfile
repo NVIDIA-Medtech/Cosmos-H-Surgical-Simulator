@@ -49,6 +49,19 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 RUN --mount=type=bind,source=packages,target=packages \
     pip install --no-deps packages/*
 
+ARG APP_UID=10001
+ARG APP_GID=10001
+RUN --mount=type=bind,source=bin/setup-container-user.sh,target=/tmp/setup-container-user.sh \
+    --mount=type=bind,source=docker/nightly-torchrun,target=/tmp/nightly-torchrun \
+    bash /tmp/setup-container-user.sh "$APP_UID" "$APP_GID" && \
+    python -m venv --system-site-packages /opt/cosmos-venv && \
+    install -m 0755 /tmp/nightly-torchrun /opt/cosmos-venv/bin/torchrun && \
+    chown -R cosmos:cosmos /opt/cosmos-venv
+ENV HOME=/home/cosmos
+ENV XDG_CACHE_HOME=/home/cosmos/.cache
+ENV PATH="/opt/cosmos-venv/bin:/home/cosmos/.local/bin:$PATH"
+USER cosmos:cosmos
+
 ENTRYPOINT ["/workspace/docker/nightly-entrypoint.sh"]
 
 CMD ["/bin/bash"]

@@ -218,21 +218,20 @@ class PostTrainNemoAssets:
         # Set up environment
         self.setup_environment_variables()
 
-        # Build training command
-        base_cmd = "torchrun --nproc_per_node=8 --master_port=12341"
-        script = "-m scripts.train"
-        config = "cosmos_predict2/_src/predict2/configs/video2world/config.py"
-
-        # Build command parts for better readability
-        cmd_parts = [
-            f"{base_cmd} {script} --config={config} --",
+        command = [
+            "torchrun",
+            "--nproc_per_node=8",
+            "--master_port=12341",
+            "-m",
+            "scripts.train",
+            "--config=cosmos_predict2/_src/predict2/configs/video2world/config.py",
+            "--",
             f"experiment={self.experiment_name}",
             f"trainer.max_iter={self.max_iters}",
             f"checkpoint.save_iter={self.checkpoint_save_iter}",
             "job.wandb_mode=disabled",
         ]
-        command = " ".join(cmd_parts)
-        run(command, shell=True)
+        run(command)
         print("Training completed.")
         self.pipeline_state["training_completed"] = True
         return self

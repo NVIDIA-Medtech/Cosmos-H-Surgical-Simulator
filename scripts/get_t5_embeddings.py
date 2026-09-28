@@ -15,12 +15,12 @@
 
 import argparse
 import os
-import pickle
 
 import numpy as np
 
 from cosmos_predict2._src.imaginaire.auxiliary.text_encoder import CosmosT5TextEncoder, CosmosT5TextEncoderConfig
 from cosmos_predict2._src.imaginaire.constants import T5_MODEL_DIR
+from cosmos_predict2._src.imaginaire.utils import safe_data
 
 """example command
 python -m scripts.get_t5_embeddings --dataset_path datasets/hdvila
@@ -53,7 +53,7 @@ def main(args) -> None:
     encoder = CosmosT5TextEncoder(config=encoder_config)
 
     for meta_filename in metas_list:
-        t5_xxl_filename = os.path.join(t5_xxl_dir, os.path.basename(meta_filename).replace(".txt", ".pickle"))
+        t5_xxl_filename = os.path.join(t5_xxl_dir, os.path.basename(meta_filename).replace(".txt", ".cdata"))
         if os.path.exists(t5_xxl_filename):
             # Skip if the file already exists
             continue
@@ -73,9 +73,9 @@ def main(args) -> None:
         # trim zeros to save space
         encoded_text = [encoded_text[batch_id][: lengths[batch_id]] for batch_id in range(encoded_text.shape[0])]
 
-        # Save T5 embeddings as pickle file
+        # Save T5 embeddings as a non-executable data archive
         with open(t5_xxl_filename, "wb") as fp:
-            pickle.dump(encoded_text, fp)
+            safe_data.dump(encoded_text, fp)
 
 
 if __name__ == "__main__":

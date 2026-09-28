@@ -13,26 +13,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import yaml
-
-try:
-    from yaml import CDumper as Dumper  # type: ignore
-    from yaml import CLoader as Loader  # type: ignore
-except ImportError:
-    from yaml import Dumper, Loader  # type: ignore
-
-from cosmos_predict2._src.imaginaire.utils.easy_io.handlers.base import BaseFileHandler  # isort:skip
+from cosmos_predict2._src.imaginaire.utils.easy_io.handlers.base import BaseFileHandler
+from cosmos_predict2._src.imaginaire.utils.safe_yaml import dump_yaml, load_yaml
 
 
 class YamlHandler(BaseFileHandler):
     def load_from_fileobj(self, file, **kwargs):
-        kwargs.setdefault("Loader", Loader)
-        return yaml.load(file, **kwargs)
+        if kwargs:
+            raise ValueError("YAML loader overrides are not supported")
+        return load_yaml(file)
 
     def dump_to_fileobj(self, obj, file, **kwargs):
-        kwargs.setdefault("Dumper", Dumper)
-        yaml.dump(obj, file, **kwargs)
+        file.write(dump_yaml(obj, **kwargs))
 
     def dump_to_str(self, obj, **kwargs):
-        kwargs.setdefault("Dumper", Dumper)
-        return yaml.dump(obj, **kwargs)
+        return dump_yaml(obj, **kwargs)

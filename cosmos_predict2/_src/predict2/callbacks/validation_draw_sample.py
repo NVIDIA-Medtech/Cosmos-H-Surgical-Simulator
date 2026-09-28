@@ -132,7 +132,7 @@ class ValidationDrawSample(Callback):
         if self.use_negative_prompt:
             if self.prompt_type == "t5_xxl":
                 self.negative_prompt_data = easy_io.load(
-                    "s3://bucket/edify_video/v4/validation/item_dataset/negative_prompt/000000.pkl"
+                    "s3://bucket/edify_video/v4/validation/item_dataset/negative_prompt/000000.cdata"
                 )
             elif self.prompt_type == "umt5_xxl":
                 self.negative_prompt_data = easy_io.load(
