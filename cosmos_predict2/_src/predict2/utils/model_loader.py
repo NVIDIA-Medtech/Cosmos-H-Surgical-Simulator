@@ -36,6 +36,22 @@ from cosmos_predict2._src.predict2.checkpointer.dcp import (
     dcp_load_state_dict,
 )
 
+S3_TRAINING_CREDENTIAL_PATH = "credentials/s3_training.secret"
+
+
+def _backend_args_for(uri: str) -> Optional[dict]:
+    """Backend arguments for reading ``uri``, or None for local paths.
+
+    The s3 backend has no usable default: constructed with no arguments it
+    raises, because exactly one of ``profile`` or ``s3_credential_path`` must
+    be given. Relying on a backend someone registered earlier in the process
+    makes loading depend on unrelated startup order, so name the credential
+    explicitly here.
+    """
+    if uri.startswith("s3://"):
+        return {"backend": "s3", "s3_credential_path": S3_TRAINING_CREDENTIAL_PATH}
+    return None
+
 
 def load_model_from_checkpoint(
     experiment_name,
@@ -246,7 +262,7 @@ def load_model_state_dict_from_checkpoint(
                 # right backend into the registered safetensors handler.
                 local_state_dict = safetensors_load_file(local_s3_ckpt_fp)
             elif checkpoint_format == "safetensors":
-                local_state_dict = easy_io.load(local_s3_ckpt_fp)
+                local_state_dict = easy_io.load(local_s3_ckpt_fp, backend_args=_backend_args_for(local_s3_ckpt_fp))
             else:
                 local_state_dict = easy_io.load(local_s3_ckpt_fp, weights_only=True)
 
@@ -331,7 +347,7 @@ def load_model_state_dict_from_checkpoint(
                         s3_checkpoint_dir,
                         backend_args={
                             "backend": "s3",
-                            "s3_credential_path": "credentials/s3_training.secret",
+                            "s3_credential_path": S3_TRAINING_CREDENTIAL_PATH,
                         },
                     )
                 else:
