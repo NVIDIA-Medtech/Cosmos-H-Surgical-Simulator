@@ -147,7 +147,8 @@ def load_model_from_checkpoint(
                     if checkpoint_path.endswith(".safetensors"):
                         adapter_state_dict = safetensors_load_file(checkpoint_path)
                     else:
-                        adapter_state_dict = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
+                        # adapter_state_dict = easy_io.load(checkpoint_path)
+                        adapter_state_dict = torch.load(checkpoint_path, map_location="cpu")
                     old_keys = list(adapter_state_dict.keys())
                     for key in old_keys:
                         if "lora_" in key:
