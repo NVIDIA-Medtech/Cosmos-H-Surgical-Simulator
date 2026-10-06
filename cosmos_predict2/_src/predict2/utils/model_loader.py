@@ -19,6 +19,7 @@ from typing import Optional
 
 import torch
 from peft import LoraConfig, set_peft_model_state_dict
+from safetensors.torch import load_file as safetensors_load_file
 
 from cosmos_predict2._src.imaginaire.config import Config
 from cosmos_predict2._src.imaginaire.flags import SMOKE
@@ -34,6 +35,22 @@ from cosmos_predict2._src.predict2.checkpointer.dcp import (
     ModelWrapper,
     dcp_load_state_dict,
 )
+
+S3_TRAINING_CREDENTIAL_PATH = "credentials/s3_training.secret"
+
+
+def _backend_args_for(uri: str) -> Optional[dict]:
+    """Backend arguments for reading ``uri``, or None for local paths.
+
+    The s3 backend has no usable default: constructed with no arguments it
+    raises, because exactly one of ``profile`` or ``s3_credential_path`` must
+    be given. Relying on a backend someone registered earlier in the process
+    makes loading depend on unrelated startup order, so name the credential
+    explicitly here.
+    """
+    if uri.startswith("s3://"):
+        return {"backend": "s3", "s3_credential_path": S3_TRAINING_CREDENTIAL_PATH}
+    return None
 
 
 def load_model_from_checkpoint(
@@ -142,9 +159,12 @@ def load_model_from_checkpoint(
                 )
                 model.net.add_adapter(adapter_name, lora_config)
 
-                if checkpoint_path.endswith(".pt"):
-                    # adapter_state_dict = easy_io.load(checkpoint_path)
-                    adapter_state_dict = torch.load(checkpoint_path, map_location="cpu")
+                if checkpoint_path.endswith((".safetensors", ".pt")):
+                    if checkpoint_path.endswith(".safetensors"):
+                        adapter_state_dict = safetensors_load_file(checkpoint_path)
+                    else:
+                        # adapter_state_dict = easy_io.load(checkpoint_path)
+                        adapter_state_dict = torch.load(checkpoint_path, map_location="cpu")
                     old_keys = list(adapter_state_dict.keys())
                     for key in old_keys:
                         if "lora_" in key:
@@ -202,9 +222,16 @@ def load_model_state_dict_from_checkpoint(
 ):
     if s3_checkpoint_dir is not None:
         s3_checkpoint_dir = str(s3_checkpoint_dir)
-    checkpoint_format = "pt" if s3_checkpoint_dir.endswith(".pt") else "dcp"
+    # A single-file checkpoint is either safetensors (preferred) or a legacy
+    # .pt; anything else is a distributed-checkpoint directory.
+    if s3_checkpoint_dir.endswith(".safetensors"):
+        checkpoint_format = "safetensors"
+    elif s3_checkpoint_dir.endswith(".pt"):
+        checkpoint_format = "pt"
+    else:
+        checkpoint_format = "dcp"
     if s3_checkpoint_dir.startswith("s3:"):
-        if checkpoint_format == "pt":
+        if checkpoint_format in ("pt", "safetensors"):
             cur_key_ckpt_full_path = s3_checkpoint_dir
         elif s3_checkpoint_dir.rstrip("/").endswith("/model"):
             cur_key_ckpt_full_path = s3_checkpoint_dir
@@ -225,14 +252,28 @@ def load_model_state_dict_from_checkpoint(
         # Load on rank0 only and broadcast
         if distributed.is_rank0():
             log.info(f"Loading model cached locally from {local_s3_ckpt_fp}")
-            local_state_dict = easy_io.load(local_s3_ckpt_fp, weights_only=True)
+            if checkpoint_format == "safetensors" and "://" not in local_s3_ckpt_fp:
+                # Read via the path-based reader so the checkpoint is mmapped
+                # rather than buffered in full; easy_io.load would materialize
+                # the whole multi-GB file as bytes before deserializing it.
+                # Local files only: get_checkpoint_path returns s3:// and hf://
+                # addresses unchanged when INTERNAL is set, and this reader
+                # opens a filesystem path. easy_io routes those through the
+                # right backend into the registered safetensors handler.
+                local_state_dict = safetensors_load_file(local_s3_ckpt_fp)
+            elif checkpoint_format == "safetensors":
+                local_state_dict = easy_io.load(local_s3_ckpt_fp, backend_args=_backend_args_for(local_s3_ckpt_fp))
+            else:
+                local_state_dict = easy_io.load(local_s3_ckpt_fp, weights_only=True)
 
-            # Handle LoRA key mapping if the model uses LoRA and checkpoint is in .pt format
+            # Handle LoRA key mapping if the model uses LoRA and the checkpoint is
+            # a single-file state dict (.safetensors or legacy .pt); both use the
+            # same flat key layout, unlike a DCP directory.
             if (
                 hasattr(model, "config")
                 and hasattr(model.config, "use_lora")
                 and model.config.use_lora
-                and checkpoint_format == "pt"
+                and checkpoint_format in ("pt", "safetensors")
             ):
                 log.info("Model uses LoRA, mapping checkpoint keys to model keys with base_layer...")
                 mapped_state_dict = {}
@@ -306,7 +347,7 @@ def load_model_state_dict_from_checkpoint(
                         s3_checkpoint_dir,
                         backend_args={
                             "backend": "s3",
-                            "s3_credential_path": "credentials/s3_training.secret",
+                            "s3_credential_path": S3_TRAINING_CREDENTIAL_PATH,
                         },
                     )
                 else:

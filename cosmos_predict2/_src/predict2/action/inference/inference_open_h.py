@@ -40,7 +40,7 @@ Usage:
     # CMR Versius (same as before, just with --embodiment flag):
     CUDA_VISIBLE_DEVICES=0 PYTHONPATH=. python cosmos_predict2/_src/predict2/action/inference/inference_open_h.py \\
         --experiment cosmos_predict2p5_2B_action_conditioned_open_h-fixed_13frame_8nodes_release_oss \\
-        --ckpt_path /path/to/checkpoint/model_ema_bf16.pt \\
+        --ckpt_path /path/to/checkpoint/model_ema_bf16.safetensors \\
         --dataset_path /path/to/Open-H/Surgical/cmr_surgical/cholecystectomy \\
         --embodiment cmr_versius \\
         --data_split full \\
@@ -49,7 +49,7 @@ Usage:
     # dVRK JHU (monocular):
     CUDA_VISIBLE_DEVICES=0 PYTHONPATH=. python cosmos_predict2/_src/predict2/action/inference/inference_open_h.py \\
         --experiment cosmos_predict2p5_2B_action_conditioned_open_h-fixed_13frame_8nodes_release_oss \\
-        --ckpt_path /path/to/checkpoint/model_ema_bf16.pt \\
+        --ckpt_path /path/to/checkpoint/model_ema_bf16.safetensors \\
         --dataset_path /path/to/jhu/suturebot_2 \\
         --embodiment jhu_dvrk_mono \\
         --episode_ids 0,1,2
@@ -57,7 +57,7 @@ Usage:
     # Stanford Real (with exclude_splits):
     CUDA_VISIBLE_DEVICES=0 PYTHONPATH=. python cosmos_predict2/_src/predict2/action/inference/inference_open_h.py \\
         --experiment cosmos_predict2p5_2B_action_conditioned_open_h-fixed_13frame_8nodes_release_oss \\
-        --ckpt_path /path/to/checkpoint/model_ema_bf16.pt \\
+        --ckpt_path /path/to/checkpoint/model_ema_bf16.safetensors \\
         --dataset_path /path/to/stanford/Needle_Transfer \\
         --embodiment dvrk_stanford_real \\
         --exclude_splits fail bad_frames \\
@@ -100,7 +100,9 @@ def parse_arguments() -> argparse.Namespace:
 
     # --- Model arguments ---
     parser.add_argument("--experiment", type=str, required=True, help="Experiment config name")
-    parser.add_argument("--ckpt_path", type=str, required=True, help="Path to the checkpoint (.pt file)")
+    parser.add_argument(
+        "--ckpt_path", type=str, required=True, help="Path to the checkpoint (.safetensors, or legacy .pt)"
+    )
     parser.add_argument("--s3_cred", type=str, default="credentials/s3_checkpoint.secret")
 
     # --- Data arguments ---

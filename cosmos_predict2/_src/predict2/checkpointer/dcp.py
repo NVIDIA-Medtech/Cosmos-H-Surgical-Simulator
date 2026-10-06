@@ -490,7 +490,9 @@ class DistributedCheckpointer(AbstractCheckpointer):
             checkpoint_path = os.path.join(self.load_dirname, latest_checkpoint_file)
             resume_keys.extend(self.KEYS_TO_SAVE)
         else:
-            if self.load_path and not str(self.load_path).endswith(".pt"):
+            # Single-file checkpoints (.safetensors, legacy .pt) are not DCP
+            # directories and are loaded elsewhere.
+            if self.load_path and not str(self.load_path).endswith((".safetensors", ".pt")):
                 # 2. Load the module weights specified by config_checkpoint.path.
                 checkpoint_path = self.load_path
                 if self.load_s3_backend_key:

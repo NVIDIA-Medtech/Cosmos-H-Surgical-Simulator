@@ -24,6 +24,7 @@ from cosmos_predict2._src.imaginaire.utils.easy_io.handlers.np_handler import Nu
 from cosmos_predict2._src.imaginaire.utils.easy_io.handlers.pandas_handler import PandasHandler
 from cosmos_predict2._src.imaginaire.utils.easy_io.handlers.pickle_handler import PickleHandler
 from cosmos_predict2._src.imaginaire.utils.easy_io.handlers.pil_handler import PILHandler
+from cosmos_predict2._src.imaginaire.utils.easy_io.handlers.safetensors_handler import SafetensorsHandler
 from cosmos_predict2._src.imaginaire.utils.easy_io.handlers.tarfile_handler import TarHandler
 from cosmos_predict2._src.imaginaire.utils.easy_io.handlers.torch_handler import TorchHandler
 from cosmos_predict2._src.imaginaire.utils.easy_io.handlers.torchjit_handler import TorchJitHandler
@@ -46,6 +47,7 @@ file_handlers = {
     "gz": GzipHandler(),
     "jsonl": JsonlHandler(),
     "byte": ByteHandler(),
+    "safetensors": SafetensorsHandler(),
 }
 
 for torch_type in ["pt", "pth", "ckpt"]:

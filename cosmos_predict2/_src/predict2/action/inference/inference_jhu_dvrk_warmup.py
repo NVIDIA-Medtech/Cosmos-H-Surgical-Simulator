@@ -65,7 +65,7 @@ Example:
     CUDA_VISIBLE_DEVICES=0 PYTHONPATH=. python \\
         cosmos_predict2/_src/predict2/action/inference/inference_jhu_dvrk_warmup.py \\
         --experiment cosmos_predict2p5_2B_action_conditioned_jhu_dvrk_mono_finetune_13frame_8nodes_release_oss \\
-        --ckpt_path /path/to/iter_000005000/model_ema_bf16.pt \\
+        --ckpt_path /path/to/iter_000005000/model_ema_bf16.safetensors \\
         --save_root datasets/jhu_dvrk_mono_warmup_4step_h73_tabletop \\
         --resolution 288,512 --guidance 0 --num_frames 73 --chunk_size 72 \\
         --sample_strategy random --total_samples 10000 --indices_seed 0 \\
@@ -114,7 +114,7 @@ def parse_arguments() -> argparse.Namespace:
         "--ckpt_path",
         type=str,
         default="",
-        help="Path to the teacher checkpoint (.pt file or DCP dir). If empty, falls back to the experiment's load_path.",
+        help="Path to the teacher checkpoint (.safetensors, legacy .pt, or DCP dir). If empty, falls back to the experiment's load_path.",
     )
     parser.add_argument("--s3_cred", type=str, default="credentials/s3_checkpoint.secret")
     parser.add_argument(

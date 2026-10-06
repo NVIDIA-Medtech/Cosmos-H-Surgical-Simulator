@@ -32,7 +32,7 @@ Uses LeRobotDataset directly to ensure actions are transformed identically to tr
 Usage:
     CUDA_VISIBLE_DEVICES=0 PYTHONPATH=. python cosmos_predict2/_src/predict2/action/inference/inference_cmr.py \
         --experiment=cosmos_predict2p5_2B_action_conditioned_cmr_13frame_44D_8nodes_release_oss \
-        --ckpt_path /path/to/checkpoint/model_ema_bf16.pt \
+        --ckpt_path /path/to/checkpoint/model_ema_bf16.safetensors \
         --dataset_path /path/to/Open-H/Surgical/cmr_surgical/cholecystectomy \
         --save_root results/cmr_eval/cholecystectomy \
         --data_split full \
@@ -72,7 +72,7 @@ def parse_arguments() -> argparse.Namespace:
         "--ckpt_path",
         type=str,
         required=True,
-        help="Path to the checkpoint (.pt file)",
+        help="Path to the checkpoint (.safetensors, or legacy .pt)",
     )
     parser.add_argument("--s3_cred", type=str, default="credentials/s3_checkpoint.secret")
 
