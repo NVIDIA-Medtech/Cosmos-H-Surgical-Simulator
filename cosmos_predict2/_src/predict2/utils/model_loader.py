@@ -236,11 +236,17 @@ def load_model_state_dict_from_checkpoint(
         # Load on rank0 only and broadcast
         if distributed.is_rank0():
             log.info(f"Loading model cached locally from {local_s3_ckpt_fp}")
-            if checkpoint_format == "safetensors":
+            if checkpoint_format == "safetensors" and "://" not in local_s3_ckpt_fp:
                 # Read via the path-based reader so the checkpoint is mmapped
                 # rather than buffered in full; easy_io.load would materialize
                 # the whole multi-GB file as bytes before deserializing it.
+                # Local files only: get_checkpoint_path returns s3:// and hf://
+                # addresses unchanged when INTERNAL is set, and this reader
+                # opens a filesystem path. easy_io routes those through the
+                # right backend into the registered safetensors handler.
                 local_state_dict = safetensors_load_file(local_s3_ckpt_fp)
+            elif checkpoint_format == "safetensors":
+                local_state_dict = easy_io.load(local_s3_ckpt_fp)
             else:
                 local_state_dict = easy_io.load(local_s3_ckpt_fp, weights_only=True)
 

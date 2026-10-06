@@ -9,8 +9,30 @@ For the generic action-conditioned pipeline (Bridge dataset), see the [Action-Co
 
 1. [Setup Guide](setup.md) — environment and dependencies
 2. [HuggingFace authentication](setup.md#downloading-checkpoints) — required for checkpoint and dataset downloads
-3. A trained checkpoint (`model_ema_bf16.safetensors`) — see [Surgical Post-Training](post-training_surgical.md) or [download it](#downloading-the-checkpoint-and-dataset) from [HuggingFace](https://huggingface.co/nvidia/Cosmos-H-Surgical-Simulator)
+3. A trained checkpoint — [download](#downloading-the-checkpoint-and-dataset) `model_ema_bf16.safetensors` from [HuggingFace](https://huggingface.co/nvidia/Cosmos-H-Surgical-Simulator), or produce your own with [Surgical Post-Training](post-training_surgical.md); see [Checkpoint formats](#checkpoint-formats)
 4. A dataset in LeRobot format with the metadata files its embodiment requires — see [Dataset metadata requirements](#dataset-metadata-requirements)
+
+## Checkpoint formats
+
+`--ckpt_path` accepts both `.safetensors` and `.pt`, so the examples below work with either.
+
+The released checkpoint is `.safetensors`, because Safetensors contains no executable code and is the mandated format for distributed NVIDIA model weights. [Surgical Post-Training](post-training_surgical.md) still writes `model_ema_bf16.pt`; use it as-is for local inference — the loader reads it with restricted loading.
+
+Convert a `.pt` you produced yourself before distributing it:
+
+```python
+import torch
+from safetensors.torch import save_file
+
+state_dict = torch.load("model_ema_bf16.pt", map_location="cpu", weights_only=True)
+# clone(): safetensors rejects tensors that share storage with one another
+save_file(
+    {k: v.detach().clone().contiguous() for k, v in state_dict.items()},
+    "model_ema_bf16.safetensors",
+)
+```
+
+Safetensors stores tensors only. The conversion fails if a checkpoint holds anything else, which is the point: convert only checkpoints whose provenance you trust.
 
 ## Downloading the checkpoint and dataset
 

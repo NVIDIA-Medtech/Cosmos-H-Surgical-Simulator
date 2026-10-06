@@ -44,7 +44,9 @@ def launch(config: Config, args: argparse.Namespace) -> None:
 
     # Create the model and load the consolidated checkpoint if provided.
     # If the checkpoint is in DCP format, checkpoint loading will be handled by the DCP checkpointer.
-    if isinstance(config.checkpoint.load_path, str) and config.checkpoint.load_path.endswith(".pt"):
+    # This must list every single-file format the DCP checkpointer declines to
+    # handle, or those weights are silently dropped and training starts fresh.
+    if isinstance(config.checkpoint.load_path, str) and config.checkpoint.load_path.endswith((".safetensors", ".pt")):
         model = create_model_from_consolidated_checkpoint_with_fsdp(config)
     else:
         model = instantiate(config.model)
