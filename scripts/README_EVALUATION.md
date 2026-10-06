@@ -83,7 +83,7 @@ python scripts/print_test_datasets_and_episodes.py --output output/open-h_test_e
 
 ```bash
 CUDA_VISIBLE_DEVICES=0 PYTHONPATH=. python scripts/cosmos_h_surgical_simulator_quant_eval.py \
-  --ckpt_path /path/to/model_ema_bf16.pt \
+  --ckpt_path /path/to/model_ema_bf16.safetensors \
   --sam3_checkpoint /path/to/medical_sam3_cholecseg8k.pt \
   --test_episodes_json output/open-h_test_episodes.json \
   --episodes_per_dataset 2 --num_seeds 2
@@ -315,7 +315,7 @@ Medical-SAM3 must be installed and configured separately:
 
 ```bash
 CUDA_VISIBLE_DEVICES=0 PYTHONPATH=. python scripts/cosmos_h_surgical_simulator_quant_eval.py \
-  --ckpt_path /path/to/model_ema_bf16.pt \
+  --ckpt_path /path/to/model_ema_bf16.safetensors \
   --sam3_checkpoint /path/to/medical_sam3_cholecseg8k.pt \
   --test_episodes_json output/open-h_test_episodes.json \
   --episodes_per_dataset 2 --num_seeds 2
@@ -325,7 +325,7 @@ CUDA_VISIBLE_DEVICES=0 PYTHONPATH=. python scripts/cosmos_h_surgical_simulator_q
 
 ```bash
 CUDA_VISIBLE_DEVICES=0 PYTHONPATH=. python scripts/cosmos_h_surgical_simulator_quant_eval.py \
-  --ckpt_path /path/to/model_ema_bf16.pt \
+  --ckpt_path /path/to/model_ema_bf16.safetensors \
   --sam3_checkpoint /path/to/medical_sam3_cholecseg8k.pt \
   --test_episodes_json output/open-h_test_episodes.json \
   --episodes_per_dataset 2 --num_seeds 2 \
@@ -346,7 +346,7 @@ CUDA_VISIBLE_DEVICES=0 PYTHONPATH=. python scripts/cosmos_h_surgical_simulator_q
 
 ```bash
 CUDA_VISIBLE_DEVICES=0 PYTHONPATH=. python scripts/cosmos_h_surgical_simulator_quant_eval.py \
-  --ckpt_path /path/to/model_ema_bf16.pt \
+  --ckpt_path /path/to/model_ema_bf16.safetensors \
   --sam3_checkpoint /path/to/medical_sam3_cholecseg8k.pt
 ```
 

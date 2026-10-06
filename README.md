@@ -96,7 +96,7 @@ hf auth login
 # Run action-conditioned surgical simulation
 CUDA_VISIBLE_DEVICES=0 PYTHONPATH=. python cosmos_predict2/_src/predict2/action/inference/inference_open_h.py \
   --experiment cosmos_predict2p5_2B_action_conditioned_open_h-fixed_13frame_8nodes_release_oss \
-  --ckpt_path /path/to/model_ema_bf16.pt \
+  --ckpt_path /path/to/model_ema_bf16.safetensors \
   --dataset_path /path/to/Open-H/Surgical/cmr_surgical/cholecystectomy \
   --embodiment cmr_versius \
   --data_split full \

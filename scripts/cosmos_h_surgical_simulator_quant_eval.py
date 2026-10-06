@@ -43,7 +43,7 @@ EXAMPLE USAGE:
 
   # Single checkpoint:
   CUDA_VISIBLE_DEVICES=0 PYTHONPATH=. python scripts/cosmos_h_surgical_simulator_quant_eval.py \\
-    --ckpt_path /path/to/model_ema_bf16.pt \\
+    --ckpt_path /path/to/model_ema_bf16.safetensors \\
     --sam3_checkpoint /path/to/sam3_checkpoint.pt
 
   # Multiple checkpoints:
@@ -53,7 +53,7 @@ EXAMPLE USAGE:
 
   # Fewer episodes / seeds for quick debugging:
   CUDA_VISIBLE_DEVICES=0 PYTHONPATH=. python scripts/cosmos_h_surgical_simulator_quant_eval.py \\
-    --ckpt_path /path/to/model_ema_bf16.pt \\
+    --ckpt_path /path/to/model_ema_bf16.safetensors \\
     --sam3_checkpoint /path/to/sam3_checkpoint.pt \\
     --num_episodes 1 --num_seeds 1
 
