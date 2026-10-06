@@ -9,7 +9,7 @@ For the generic action-conditioned pipeline (Bridge dataset), see the [Action-Co
 
 1. [Setup Guide](setup.md) — environment and dependencies
 2. [HuggingFace authentication](setup.md#downloading-checkpoints) — required for checkpoint and dataset downloads
-3. A trained checkpoint (`model_ema_bf16.pt`) — see [Surgical Post-Training](post-training_surgical.md) or [download it](#downloading-the-checkpoint-and-dataset) from [HuggingFace](https://huggingface.co/nvidia/Cosmos-H-Surgical-Simulator)
+3. A trained checkpoint (`model_ema_bf16.safetensors`) — see [Surgical Post-Training](post-training_surgical.md) or [download it](#downloading-the-checkpoint-and-dataset) from [HuggingFace](https://huggingface.co/nvidia/Cosmos-H-Surgical-Simulator)
 4. A dataset in LeRobot format with the metadata files its embodiment requires — see [Dataset metadata requirements](#dataset-metadata-requirements)
 
 ## Downloading the checkpoint and dataset
@@ -20,7 +20,7 @@ The released checkpoint is a single ~4 GB file:
 
 ```bash
 hf download nvidia/Cosmos-H-Surgical-Simulator \
-  --include "checkpoints/iter_000012000-v2/model_ema_bf16.pt" \
+  --include "checkpoints/iter_000012000-v2/model_ema_bf16.safetensors" \
   --local-dir checkpoints/Cosmos-H-Surgical-Simulator
 ```
 
@@ -91,7 +91,7 @@ Run action-conditioned video generation on any supported embodiment using `infer
 ```bash
 CUDA_VISIBLE_DEVICES=0 PYTHONPATH=. python cosmos_predict2/_src/predict2/action/inference/inference_open_h.py \
   --experiment cosmos_predict2p5_2B_action_conditioned_open_h-fixed_13frame_8nodes_release_oss \
-  --ckpt_path checkpoints/Cosmos-H-Surgical-Simulator/checkpoints/iter_000012000-v2/model_ema_bf16.pt \
+  --ckpt_path checkpoints/Cosmos-H-Surgical-Simulator/checkpoints/iter_000012000-v2/model_ema_bf16.safetensors \
   --dataset_path datasets/Open-H/Surgical/cmr_surgical/cholecystectomy \
   --embodiment cmr_versius \
   --data_split full \
@@ -107,7 +107,7 @@ The paths above are the ones produced by [Downloading the checkpoint and dataset
 ```bash
 CUDA_VISIBLE_DEVICES=0 PYTHONPATH=. python cosmos_predict2/_src/predict2/action/inference/inference_open_h.py \
   --experiment cosmos_predict2p5_2B_action_conditioned_open_h-fixed_13frame_8nodes_release_oss \
-  --ckpt_path /path/to/model_ema_bf16.pt \
+  --ckpt_path /path/to/model_ema_bf16.safetensors \
   --dataset_path /path/to/suturebot_2 \
   --embodiment jhu_dvrk_mono \
   --episode_ids 0,1,2
@@ -120,7 +120,7 @@ Some datasets contain splits that should be excluded during evaluation (e.g., fa
 ```bash
 CUDA_VISIBLE_DEVICES=0 PYTHONPATH=. python cosmos_predict2/_src/predict2/action/inference/inference_open_h.py \
   --experiment cosmos_predict2p5_2B_action_conditioned_open_h-fixed_13frame_8nodes_release_oss \
-  --ckpt_path /path/to/model_ema_bf16.pt \
+  --ckpt_path /path/to/model_ema_bf16.safetensors \
   --dataset_path /path/to/Needle_Transfer \
   --embodiment dvrk_stanford_real \
   --exclude_splits fail bad_frames \
@@ -132,7 +132,7 @@ CUDA_VISIBLE_DEVICES=0 PYTHONPATH=. python cosmos_predict2/_src/predict2/action/
 | Argument | Description |
 |---|---|
 | `--experiment` | Experiment config name (use the Open-H config shown above) |
-| `--ckpt_path` | Path to converted checkpoint (`model_ema_bf16.pt`) |
+| `--ckpt_path` | Path to the checkpoint (`model_ema_bf16.safetensors`; legacy `.pt` also accepted) |
 | `--dataset_path` | Path to the LeRobot dataset directory |
 | `--embodiment` | Embodiment tag (see [Supported Embodiments](../README.md#supported-embodiments)) |
 | `--data_split` | `train`, `test` (default, trailing 5% of samples) or `full`; use `full` to address any episode by its dataset index |
@@ -157,7 +157,7 @@ For models trained exclusively on CMR Surgical Versius data, use `inference_cmr.
 ```bash
 CUDA_VISIBLE_DEVICES=0 PYTHONPATH=. python cosmos_predict2/_src/predict2/action/inference/inference_cmr.py \
   --experiment cosmos_predict2p5_2B_action_conditioned_cmr_13frame_44D_8nodes_release_oss \
-  --ckpt_path /path/to/model_ema_bf16.pt \
+  --ckpt_path /path/to/model_ema_bf16.safetensors \
   --dataset_path /path/to/Open-H/Surgical/cmr_surgical/cholecystectomy \
   --save_root results/cmr_eval/cholecystectomy \
   --data_split full \

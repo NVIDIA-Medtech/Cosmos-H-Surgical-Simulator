@@ -1,5 +1,18 @@
 # Security migration guide
 
+## Released weights are Safetensors
+
+Released model weights are distributed as `.safetensors`. Safetensors contains
+no executable code, so loading it cannot run arbitrary code, and it is the
+mandated format for distributed NVIDIA model weights. `--ckpt_path` accepts a
+`.safetensors` file anywhere a single-file checkpoint is expected; `easy_io`
+reads and writes the format by extension.
+
+Legacy `.pt` checkpoints still load, under restricted loading (see below), so
+existing local training outputs keep working. Prefer `.safetensors` for anything
+you distribute. Convert a trusted `.pt` you produced yourself with
+`safetensors.torch.save_file`, after confirming it holds only tensors.
+
 ## Checkpoints
 
 Use a supported CUDA extra (PyTorch 2.7 or 2.9). Runtime checkpoint readers use
